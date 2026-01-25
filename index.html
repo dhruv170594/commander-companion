@@ -654,13 +654,13 @@
                     currentUser = result.user;
                     console.log('Signed in as:', currentUser.email);
                     
-                    // Update Firestore to record companion app sign-in
+                    // Update Firestore to record companion app sign-in (separate from Commander app)
                     try {
-                        await db.collection('deviceConnections').doc(currentUser.uid).set({
-                            userSignedIn: true,
-                            lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
-                            companionAppSignedIn: true
-                        }, { merge: true });
+                        await db.collection('deviceConnections').doc(currentUser.uid).update({
+                            companionAppSignedIn: true,
+                            lastCompanionSignIn: firebase.firestore.Timestamp.now()
+                            // Note: userSignedIn is for Commander app only
+                        });
                         console.log('Updated Firestore: companion app user signed in (popup)');
                     } catch (firestoreError) {
                         console.warn('Failed to update Firestore sign-in status:', firestoreError);
@@ -848,12 +848,12 @@
                 currentUser = result.user;
                 console.log('Signed in via redirect as:', currentUser.email);
                 
-                // Update Firestore to record companion app sign-in
-                db.collection('deviceConnections').doc(currentUser.uid).set({
-                    userSignedIn: true,
-                    lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
-                    companionAppSignedIn: true
-                }, { merge: true }).then(() => {
+                // Update Firestore to record companion app sign-in (separate from Commander app)
+                db.collection('deviceConnections').doc(currentUser.uid).update({
+                    companionAppSignedIn: true,
+                    lastCompanionSignIn: firebase.firestore.Timestamp.now()
+                    // Note: userSignedIn is for Commander app only
+                }).then(() => {
                     console.log('Updated Firestore: companion app user signed in (redirect)');
                 }).catch((firestoreError) => {
                     console.warn('Failed to update Firestore sign-in status:', firestoreError);
@@ -880,12 +880,12 @@
                 currentUser = result.user;
                 console.log('Signed in via redirect (credential) as:', currentUser?.email);
                 if (currentUser) {
-                    // Update Firestore to record companion app sign-in
-                    db.collection('deviceConnections').doc(currentUser.uid).set({
-                        userSignedIn: true,
-                        lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
-                        companionAppSignedIn: true
-                    }, { merge: true }).then(() => {
+                    // Update Firestore to record companion app sign-in (separate from Commander app)
+                    db.collection('deviceConnections').doc(currentUser.uid).update({
+                        companionAppSignedIn: true,
+                        lastCompanionSignIn: firebase.firestore.Timestamp.now()
+                        // Note: userSignedIn is for Commander app only
+                    }).then(() => {
                         console.log('Updated Firestore: companion app user signed in (credential)');
                     }).catch((firestoreError) => {
                         console.warn('Failed to update Firestore sign-in status:', firestoreError);
@@ -982,8 +982,10 @@
                 
                 const data = deviceDoc.data();
                 
-                // Check if user is signed in (even if car is off)
-                const userSignedIn = data.userSignedIn === true;
+                // Check if user is signed in (either Commander app or Companion app)
+                const commanderSignedIn = data.userSignedIn === true;
+                const companionSignedIn = data.companionAppSignedIn === true;
+                const userSignedIn = commanderSignedIn || companionSignedIn;
                 
                 if (!data.enabled && !userSignedIn) {
                     // Car not enabled and user not signed in
@@ -1413,11 +1415,12 @@
                         console.warn('Error deleting signaling doc:', e);
                     });
                     
-                    // Update Firestore to record sign-out from companion app
+                    // Update Firestore to record sign-out from companion app (separate from Commander app)
                     db.collection('deviceConnections').doc(userIdBeforeSignOut).update({
-                        userSignedIn: false,
-                        lastSignOut: firebase.firestore.FieldValue.serverTimestamp(),
-                        companionAppSignedIn: false
+                        companionAppSignedIn: false,
+                        lastCompanionSignOut: firebase.firestore.Timestamp.now()
+                        // Note: Don't set userSignedIn to false here - Commander app might still be signed in
+                        // Only set userSignedIn to false if BOTH apps are signed out
                     }).catch(e => {
                         console.warn('Error updating Firestore sign-out status:', e);
                     });
