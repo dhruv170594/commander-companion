@@ -453,6 +453,14 @@
             console.log('Firebase initialized successfully');
             console.log('Current domain:', window.location.hostname);
             console.log('Firebase auth domain:', firebaseConfig.authDomain);
+            console.log('Firebase project ID:', firebaseConfig.projectId);
+            
+            // Log important info for debugging
+            console.log('=== Firebase Configuration Check ===');
+            console.log('Make sure these are set in Firebase Console:');
+            console.log('1. Domain authorized:', window.location.hostname);
+            console.log('2. Google sign-in provider enabled');
+            console.log('=====================================');
         } catch (initError) {
             console.error('Firebase initialization failed:', initError);
             showError('Failed to initialize Firebase. Please check your configuration.');
@@ -515,6 +523,10 @@
                     throw new Error('Firebase auth not initialized. Please refresh the page.');
                 }
                 
+                // Verify domain is authorized
+                console.log('Current hostname:', window.location.hostname);
+                console.log('Firebase auth domain:', firebaseConfig.authDomain);
+                
                 const provider = new firebase.auth.GoogleAuthProvider();
                 
                 // Add custom parameters for better compatibility
@@ -522,9 +534,8 @@
                     prompt: 'select_account'
                 });
                 
-                // For network issues, skip popup and go straight to redirect
-                // This is more reliable for remote connections
-                console.log('Using redirect sign-in method (more reliable for remote connections)');
+                // Use redirect directly - it's more reliable for network issues
+                console.log('Initiating redirect sign-in...');
                 showError('Redirecting to Google sign-in...');
                 
                 // Use redirect directly - it's more reliable for network issues
@@ -566,49 +577,36 @@
                 await loadDeviceConnection();
                 */
                 
-                // This code won't be reached when using redirect
-                // It's only for popup flow (which we're not using anymore)
-                if (result && result.user) {
-                    currentUser = result.user;
-                    console.log('Signed in as:', currentUser.email);
-                    await loadDeviceConnection();
-                }
             } catch (error) {
                 console.error('Sign-in error:', error);
                 console.error('Error code:', error.code);
                 console.error('Error message:', error.message);
                 
                 let errorMessage = 'Failed to sign in: ' + error.message;
-                if (error.code === 'auth/popup-blocked') {
-                    errorMessage = 'Popup blocked. Please allow popups for this site and try again.';
+                
+                if (error.code === 'auth/network-request-failed') {
+                    errorMessage = `Network error: Firebase authentication servers are not reachable.\n\n` +
+                        `Please verify:\n` +
+                        `1. Domain "${window.location.hostname}" is added to Firebase authorized domains\n` +
+                        `   (Firebase Console → Authentication → Settings → Authorized domains)\n` +
+                        `2. Google sign-in provider is enabled\n` +
+                        `   (Firebase Console → Authentication → Sign-in method)\n` +
+                        `3. Your internet connection is working\n` +
+                        `4. No firewall/proxy is blocking Firebase services\n\n` +
+                        `Current domain: ${window.location.hostname}\n` +
+                        `Firebase auth domain: ${firebaseConfig.authDomain}`;
                 } else if (error.code === 'auth/unauthorized-domain') {
-                    errorMessage = 'Domain not authorized. Please add ' + window.location.hostname + ' to Firebase authorized domains.';
+                    errorMessage = `Domain not authorized!\n\n` +
+                        `Please add "${window.location.hostname}" to Firebase authorized domains:\n` +
+                        `1. Go to Firebase Console\n` +
+                        `2. Authentication → Settings → Authorized domains\n` +
+                        `3. Click "Add domain"\n` +
+                        `4. Enter: ${window.location.hostname}\n` +
+                        `5. Click "Add"`;
+                } else if (error.code === 'auth/popup-blocked') {
+                    errorMessage = 'Popup blocked. Please allow popups for this site and try again.';
                 } else if (error.code === 'auth/popup-closed-by-user') {
                     errorMessage = 'Sign-in cancelled. Please try again.';
-                } else if (error.code === 'auth/network-request-failed') {
-                    errorMessage = 'Network error detected. Trying redirect sign-in method...';
-                    showError(errorMessage);
-                    
-                    // Automatically try redirect on network error
-                    try {
-                        console.log('Attempting redirect sign-in due to network error...');
-                        const provider = new firebase.auth.GoogleAuthProvider();
-                        provider.setCustomParameters({ prompt: 'select_account' });
-                        
-                        // Use setTimeout to allow UI to update before redirect
-                        setTimeout(async () => {
-                            try {
-                                await auth.signInWithRedirect(provider);
-                            } catch (redirectError) {
-                                console.error('Redirect sign-in failed:', redirectError);
-                                showError('Redirect sign-in also failed. Please check: 1) Your internet connection, 2) Firebase authorized domains include ' + window.location.hostname + ', 3) Google sign-in is enabled in Firebase Console.');
-                            }
-                        }, 500);
-                        return; // Exit early, redirect will happen
-                    } catch (redirectError) {
-                        console.error('Redirect setup failed:', redirectError);
-                        errorMessage = 'Both popup and redirect sign-in failed. Please check your network connection and Firebase configuration. Error: ' + redirectError.message;
-                    }
                 }
                 
                 showError(errorMessage);
