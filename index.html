@@ -855,19 +855,18 @@
                     console.warn('Failed to update Firestore sign-in status:', e);
                 });
                 
-                // Load device connection and show app (same flow as Commander app)
-                loadDeviceConnection().then(() => {
-                    isHandlingAuth = false;
-                }).catch((error) => {
-                    isHandlingAuth = false;
-                    console.error('Error loading device connection:', error);
-                    // Still show UI even if device connection fails
-                    document.getElementById('loginScreen').style.display = 'none';
-                    document.getElementById('content').style.display = 'block';
-                    document.getElementById('signOutButton').style.display = 'block';
-                    document.getElementById('userInfo').textContent = `Signed in as: ${currentUser.email}`;
-                    document.getElementById('userInfo').style.display = 'block';
-                    showError('Car is off or not connected. The interface is available but controls are disabled.');
+                // IMMEDIATELY show app page (don't wait for device connection)
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+                document.getElementById('signOutButton').style.display = 'block';
+                document.getElementById('userInfo').textContent = `Signed in as: ${currentUser.email}`;
+                document.getElementById('userInfo').style.display = 'block';
+                hideError();
+                isHandlingAuth = false;
+                
+                // Load device connection in background (non-blocking)
+                loadDeviceConnection().catch((error) => {
+                    console.warn('Device connection load failed (non-blocking):', error);
                 });
             } else if (result.credential) {
                 // Fallback for older Firebase versions
@@ -885,19 +884,18 @@
                         console.warn('Failed to update Firestore sign-in status:', e);
                     });
                     
-                    // Load device connection and show app (same flow as Commander app)
-                    loadDeviceConnection().then(() => {
-                        isHandlingAuth = false;
-                    }).catch((error) => {
-                        isHandlingAuth = false;
-                        console.error('Error loading device connection:', error);
-                        // Still show UI even if device connection fails
-                        document.getElementById('loginScreen').style.display = 'none';
-                        document.getElementById('content').style.display = 'block';
-                        document.getElementById('signOutButton').style.display = 'block';
-                        document.getElementById('userInfo').textContent = `Signed in as: ${currentUser.email}`;
-                        document.getElementById('userInfo').style.display = 'block';
-                        showError('Car is off or not connected. The interface is available but controls are disabled.');
+                    // IMMEDIATELY show app page (don't wait for device connection)
+                    document.getElementById('loginScreen').style.display = 'none';
+                    document.getElementById('content').style.display = 'block';
+                    document.getElementById('signOutButton').style.display = 'block';
+                    document.getElementById('userInfo').textContent = `Signed in as: ${currentUser.email}`;
+                    document.getElementById('userInfo').style.display = 'block';
+                    hideError();
+                    isHandlingAuth = false;
+                    
+                    // Load device connection in background (non-blocking)
+                    loadDeviceConnection().catch((error) => {
+                        console.warn('Device connection load failed (non-blocking):', error);
                     });
                 } else {
                     isHandlingAuth = false;
@@ -1476,16 +1474,17 @@
                             console.warn('Failed to update Firestore sign-in status:', e);
                         });
                         
-                        // Load device connection and show app (same flow as Commander app)
+                        // IMMEDIATELY show app page (don't wait for device connection)
+                        document.getElementById('loginScreen').style.display = 'none';
+                        document.getElementById('content').style.display = 'block';
+                        document.getElementById('signOutButton').style.display = 'block';
+                        document.getElementById('userInfo').textContent = `Signed in as: ${user.email}`;
+                        document.getElementById('userInfo').style.display = 'block';
+                        hideError();
+                        
+                        // Load device connection in background (non-blocking)
                         loadDeviceConnection().catch((error) => {
-                            console.error('Error loading device connection:', error);
-                            // Still show UI even if device connection fails
-                            document.getElementById('loginScreen').style.display = 'none';
-                            document.getElementById('content').style.display = 'block';
-                            document.getElementById('signOutButton').style.display = 'block';
-                            document.getElementById('userInfo').textContent = `Signed in as: ${user.email}`;
-                            document.getElementById('userInfo').style.display = 'block';
-                            showError('Car is off or not connected. The interface is available but controls are disabled.');
+                            console.warn('Device connection load failed (non-blocking):', error);
                         });
                     } else {
                         // User signed out - show login screen
