@@ -443,9 +443,20 @@
         };
         
         // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
+        let auth, db;
+        try {
+            firebase.initializeApp(firebaseConfig);
+            auth = firebase.auth();
+            db = firebase.firestore();
+            
+            // Test Firebase connectivity
+            console.log('Firebase initialized successfully');
+            console.log('Current domain:', window.location.hostname);
+            console.log('Firebase auth domain:', firebaseConfig.authDomain);
+        } catch (initError) {
+            console.error('Firebase initialization failed:', initError);
+            showError('Failed to initialize Firebase. Please check your configuration.');
+        }
         
         // Use relative paths - they work from the same origin
         const API_BASE = '';
@@ -499,6 +510,11 @@
                 button.disabled = true;
                 button.textContent = 'Signing in...';
                 
+                // Check if auth is available
+                if (!auth) {
+                    throw new Error('Firebase auth not initialized. Please refresh the page.');
+                }
+                
                 const provider = new firebase.auth.GoogleAuthProvider();
                 
                 // Add custom parameters for better compatibility
@@ -506,6 +522,17 @@
                     prompt: 'select_account'
                 });
                 
+                // For network issues, skip popup and go straight to redirect
+                // This is more reliable for remote connections
+                console.log('Using redirect sign-in method (more reliable for remote connections)');
+                showError('Redirecting to Google sign-in...');
+                
+                // Use redirect directly - it's more reliable for network issues
+                await auth.signInWithRedirect(provider);
+                return; // Will redirect, so we won't reach here
+                
+                // OLD CODE - keeping for reference but not using
+                /*
                 // Try popup first, fallback to redirect if popup fails
                 let result;
                 try {
@@ -537,6 +564,15 @@
                 currentUser = result.user;
                 console.log('Signed in as:', currentUser.email);
                 await loadDeviceConnection();
+                */
+                
+                // This code won't be reached when using redirect
+                // It's only for popup flow (which we're not using anymore)
+                if (result && result.user) {
+                    currentUser = result.user;
+                    console.log('Signed in as:', currentUser.email);
+                    await loadDeviceConnection();
+                }
             } catch (error) {
                 console.error('Sign-in error:', error);
                 console.error('Error code:', error.code);
@@ -550,17 +586,28 @@
                 } else if (error.code === 'auth/popup-closed-by-user') {
                     errorMessage = 'Sign-in cancelled. Please try again.';
                 } else if (error.code === 'auth/network-request-failed') {
-                    errorMessage = 'Network error. Please check your connection and try again. If the problem persists, the page will automatically use redirect sign-in.';
+                    errorMessage = 'Network error detected. Trying redirect sign-in method...';
+                    showError(errorMessage);
+                    
                     // Automatically try redirect on network error
                     try {
                         console.log('Attempting redirect sign-in due to network error...');
                         const provider = new firebase.auth.GoogleAuthProvider();
                         provider.setCustomParameters({ prompt: 'select_account' });
-                        await auth.signInWithRedirect(provider);
-                        return;
+                        
+                        // Use setTimeout to allow UI to update before redirect
+                        setTimeout(async () => {
+                            try {
+                                await auth.signInWithRedirect(provider);
+                            } catch (redirectError) {
+                                console.error('Redirect sign-in failed:', redirectError);
+                                showError('Redirect sign-in also failed. Please check: 1) Your internet connection, 2) Firebase authorized domains include ' + window.location.hostname + ', 3) Google sign-in is enabled in Firebase Console.');
+                            }
+                        }, 500);
+                        return; // Exit early, redirect will happen
                     } catch (redirectError) {
-                        console.error('Redirect also failed:', redirectError);
-                        errorMessage = 'Both popup and redirect sign-in failed. Please check your network connection and Firebase configuration.';
+                        console.error('Redirect setup failed:', redirectError);
+                        errorMessage = 'Both popup and redirect sign-in failed. Please check your network connection and Firebase configuration. Error: ' + redirectError.message;
                     }
                 }
                 
