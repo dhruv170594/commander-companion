@@ -11,6 +11,10 @@
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <style>
         * {
             margin: 0;
@@ -251,14 +255,81 @@
             margin-bottom: 8px;
             color: #F1F3F6;
         }
+        .login-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            text-align: center;
+        }
+        .login-title {
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #F1F3F6;
+        }
+        .login-subtitle {
+            font-size: 16px;
+            color: #9AA3AF;
+            margin-bottom: 32px;
+        }
+        .login-button {
+            background: #1F8AFF;
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .login-button:hover {
+            background: #1a6fd9;
+        }
+        .login-button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .user-info {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #9AA3AF;
+        }
     </style>
 </head>
 <body>
     <div id="connectionBar" class="connection-bar"></div>
     
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-container">
+        <div class="login-title">Commander Companion</div>
+        <div class="login-subtitle">Sign in with Google to connect to your car</div>
+        <button id="googleSignInButton" class="login-button" onclick="signInWithGoogle()">
+            <svg width="20" height="20" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            Sign in with Google
+        </button>
+        <div id="userInfo" class="user-info" style="display: none;"></div>
+    </div>
+    
+    <!-- Sign out button (shown when connected) -->
+    <button id="signOutButton" class="login-button" onclick="signOut()" style="display: none; position: fixed; bottom: 20px; right: 20px; padding: 10px 16px; font-size: 14px;">
+        Sign Out
+    </button>
+    
     <div id="errorMessage" class="error" style="display: none;"></div>
     
-    <div id="loading" class="loading">Loading car data...</div>
+    <div id="loading" class="loading" style="display: none;">Connecting to your car...</div>
     
     <div id="content" style="display: none;">
         <!-- Map -->
@@ -360,11 +431,29 @@
     </div>
     
     <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBLdR1rB7z2O9Q8L0l2RHPm2rQ3sFnnG9M",
+            authDomain: "byd-commander.firebaseapp.com",
+            projectId: "byd-commander",
+            storageBucket: "byd-commander.firebasestorage.app",
+            messagingSenderId: "709147036416",
+            appId: "1:709147036416:web:ecf4b7b5915898b52881e5",
+            measurementId: "G-L8EKTDSNZG"
+        };
+        
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        
         // Use relative paths - they work from the same origin
         const API_BASE = '';
         let updateInterval = null;
         let map = null;
         let carMarker = null;
+        let currentUser = null;
+        let deviceConnectionInfo = null;
         
         // WebRTC P2P Connection
         let signalingSocket = null;
@@ -403,64 +492,110 @@
             ],
         };
         
-        // Initialize WebRTC P2P connection
-        async function initP2P() {
+        // Google Sign-In
+        async function signInWithGoogle() {
             try {
-                // Get signaling URL
-                // Use custom User-Agent to bypass localtunnel reminder page
-                const response = await fetch('/api/p2p/info', {
-                    headers: {
-                        'User-Agent': 'CommanderCompanion/1.0 (WebRTC Client)',
-                        'bypass-tunnel-reminder': 'true'
-                    }
-                });
-                const info = await response.json();
+                const button = document.getElementById('googleSignInButton');
+                button.disabled = true;
+                button.textContent = 'Signing in...';
                 
-                if (!info.p2pEnabled) {
-                    console.log('P2P not enabled');
-                    showError('P2P not enabled on server');
+                const provider = new firebase.auth.GoogleAuthProvider();
+                const result = await auth.signInWithPopup(provider);
+                currentUser = result.user;
+                
+                console.log('Signed in as:', currentUser.email);
+                await loadDeviceConnection();
+            } catch (error) {
+                console.error('Sign-in error:', error);
+                showError('Failed to sign in: ' + error.message);
+                const button = document.getElementById('googleSignInButton');
+                button.disabled = false;
+                button.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Sign in with Google';
+            }
+        }
+        
+        // Load device connection info from Firebase
+        async function loadDeviceConnection() {
+            if (!currentUser) {
+                showError('Please sign in first');
+                return;
+            }
+            
+            try {
+                document.getElementById('loading').style.display = 'block';
+                showError('Looking up your car...');
+                
+                const deviceDoc = await db.collection('deviceConnections').doc(currentUser.uid).get();
+                
+                if (!deviceDoc.exists) {
+                    showError('No car found. Please enable Web Remote Control in the Commander app and make sure you\'re signed in.');
+                    document.getElementById('loading').style.display = 'none';
                     return;
                 }
                 
-                // Connect to signaling WebSocket
-                // Use window.location.host to support remote access (works with tunnels/public IPs)
-                // This allows the signaling to work even when devices are on different networks
-                const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const wsHost = window.location.host;
-                // Use the current page's host instead of server-provided IP for remote access
-                const signalingUrl = wsProtocol + '//' + wsHost + '/ws/signal';
+                const data = deviceDoc.data();
+                if (!data.enabled) {
+                    showError('Car is not connected. Please enable Web Remote Control in the Commander app.');
+                    document.getElementById('loading').style.display = 'none';
+                    return;
+                }
                 
-                console.log('Connecting to signaling server:', signalingUrl);
-                // Note: WebSocket doesn't support custom headers in browser
-                // But we can try to connect - the server should accept it
-                signalingSocket = new WebSocket(signalingUrl);
+                deviceConnectionInfo = data;
+                console.log('Device connection info:', deviceConnectionInfo);
                 
-                signalingSocket.onopen = () => {
-                    console.log('Signaling WebSocket connected');
-                    createPeerConnection();
-                };
+                // Hide login screen, show loading and sign out button
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('signOutButton').style.display = 'block';
+                showError('Connecting to your car...');
                 
-                signalingSocket.onmessage = async (event) => {
-                    const message = JSON.parse(event.data);
-                    await handleSignalingMessage(message);
-                };
+                // Initialize P2P connection with device info
+                await initP2P();
+            } catch (error) {
+                console.error('Error loading device connection:', error);
+                showError('Failed to load car connection: ' + error.message);
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+        
+        // Initialize WebRTC P2P connection using Firebase Firestore for signaling
+        async function initP2P() {
+            try {
+                if (!currentUser || !deviceConnectionInfo) {
+                    showError('Device connection info not available');
+                    return;
+                }
                 
-                signalingSocket.onerror = (error) => {
-                    console.error('Signaling WebSocket error:', error);
-                    updateConnectionStatus(false);
-                    showError('P2P connection failed. Please check your connection.');
-                };
+                console.log('Initializing P2P with Firebase signaling');
                 
-                signalingSocket.onclose = () => {
-                    console.log('Signaling WebSocket closed');
-                    updateConnectionStatus(false);
-                    // Try to reconnect
-                    setTimeout(() => {
-                        if (!useP2P) {
-                            initP2P();
-                        }
-                    }, 3000);
-                };
+                // Use Firebase Firestore for signaling (works remotely)
+                const signalingDoc = db.collection('webrtcSignaling').doc(currentUser.uid);
+                
+                // Listen for answer and ICE candidates from Android device
+                let answerProcessed = false;
+                signalingDoc.onSnapshot((snapshot) => {
+                    if (!snapshot.exists) return;
+                    
+                    const data = snapshot.data();
+                    
+                    // Handle answer (only once)
+                    if (data.answer && !answerProcessed && peerConnection && !peerConnection.remoteDescription) {
+                        console.log('Received answer from Android device');
+                        answerProcessed = true;
+                        handleSignalingMessage({ type: 'answer', sdp: data.answer });
+                    }
+                    
+                    // Handle ICE candidates
+                    if (data.iceCandidate) {
+                        console.log('Received ICE candidate from Android device');
+                        handleSignalingMessage({ type: 'ice-candidate', candidate: data.iceCandidate });
+                        // Clear the candidate after processing
+                        signalingDoc.update({ iceCandidate: firebase.firestore.FieldValue.delete() });
+                    }
+                });
+                
+                // Create peer connection and send offer
+                createPeerConnection();
             } catch (error) {
                 console.error('Failed to initialize P2P:', error);
                 updateConnectionStatus(false);
@@ -471,13 +606,19 @@
         function createPeerConnection() {
             peerConnection = new RTCPeerConnection(rtcConfig);
             
-            // Handle ICE candidates
+            // Handle ICE candidates - send to Firebase
             peerConnection.onicecandidate = (event) => {
-                if (event.candidate && signalingSocket && signalingSocket.readyState === WebSocket.OPEN) {
-                    signalingSocket.send(JSON.stringify({
-                        type: 'ice-candidate',
-                        candidate: event.candidate
-                    }));
+                if (event.candidate && currentUser) {
+                    const signalingDoc = db.collection('webrtcSignaling').doc(currentUser.uid);
+                    const candidateData = {
+                        candidate: event.candidate.candidate,
+                        sdpMLineIndex: event.candidate.sdpMLineIndex,
+                        sdpMid: event.candidate.sdpMid
+                    };
+                    signalingDoc.update({
+                        webIceCandidate: candidateData,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    }).catch(err => console.error('Error sending ICE candidate:', err));
                 }
             };
             
@@ -508,15 +649,24 @@
             });
             setupDataChannel(dataChannel);
             
-            // Create offer
+            // Create offer and send to Firebase
             peerConnection.createOffer()
                 .then(offer => peerConnection.setLocalDescription(offer))
                 .then(() => {
-                    if (signalingSocket && signalingSocket.readyState === WebSocket.OPEN) {
-                        signalingSocket.send(JSON.stringify({
-                            type: 'offer',
-                            sdp: peerConnection.localDescription
-                        }));
+                    if (currentUser && peerConnection.localDescription) {
+                        const signalingDoc = db.collection('webrtcSignaling').doc(currentUser.uid);
+                        const offerData = {
+                            type: peerConnection.localDescription.type,
+                            sdp: peerConnection.localDescription.sdp
+                        };
+                        signalingDoc.set({
+                            offer: offerData,
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                        }).catch(err => {
+                            console.error('Error sending offer:', err);
+                            showError('Failed to send offer: ' + err.message);
+                        });
+                        console.log('Offer sent to Firebase');
                     }
                 })
                 .catch(error => {
@@ -580,11 +730,24 @@
             try {
                 switch (message.type) {
                     case 'answer':
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription(message.sdp));
+                        // message.sdp is an object with type and sdp from Firebase
+                        const answerSdp = message.sdp;
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription({
+                            type: answerSdp.type || 'answer',
+                            sdp: answerSdp.sdp || answerSdp
+                        }));
                         break;
                     case 'ice-candidate':
                         if (message.candidate) {
-                            await peerConnection.addIceCandidate(new RTCIceCandidate(message.candidate));
+                            // Candidate from Firebase has candidate, sdpMLineIndex, sdpMid
+                            const candidate = message.candidate.candidate || message.candidate;
+                            const sdpMLineIndex = message.candidate.sdpMLineIndex ?? 0;
+                            const sdpMid = message.candidate.sdpMid ?? '0';
+                            await peerConnection.addIceCandidate(new RTCIceCandidate({
+                                candidate: candidate,
+                                sdpMLineIndex: sdpMLineIndex,
+                                sdpMid: sdpMid
+                            }));
                         }
                         break;
                     default:
@@ -621,23 +784,6 @@
         // Override fetch to use P2P WebRTC data channel - no fallback
         const originalFetch = window.fetch;
         window.fetch = async function(url, options = {}) {
-            // Allow these endpoints to use original fetch (needed for initial connection setup)
-            // Use relative URLs so they work with any host (local or remote)
-            if (typeof url === 'string' && (url.includes('/api/p2p/info') || url.startsWith('/api/p2p/info'))) {
-                // Ensure we use the current page's origin for the initial connection
-                const fullUrl = url.startsWith('/') ? window.location.origin + url : url;
-                // Set custom headers to bypass localtunnel reminder page
-                const fetchOptions = {
-                    ...options,
-                    headers: {
-                        ...(options.headers || {}),
-                        'User-Agent': 'CommanderCompanion/1.0 (WebRTC Client)',
-                        'bypass-tunnel-reminder': 'true'
-                    }
-                };
-                return originalFetch(fullUrl, fetchOptions);
-            }
-            
             // Only allow requests if P2P data channel is connected
             if (!useP2P || !dataChannel || dataChannel.readyState !== 'open') {
                 return Promise.reject(new Error('P2P connection not established. Please wait for connection.'));
@@ -692,13 +838,67 @@
             });
         };
         
+        // Sign out function
+        async function signOut() {
+            try {
+                // Close P2P connection
+                if (signalingSocket) {
+                    signalingSocket.close();
+                }
+                if (peerConnection) {
+                    peerConnection.close();
+                }
+                if (dataChannel) {
+                    dataChannel.close();
+                }
+                useP2P = false;
+                
+                // Clear Firebase signaling
+                if (currentUser) {
+                    const signalingDoc = db.collection('webrtcSignaling').doc(currentUser.uid);
+                    await signalingDoc.delete();
+                }
+                
+                // Sign out from Firebase
+                await auth.signOut();
+                currentUser = null;
+                deviceConnectionInfo = null;
+                
+                // Show login screen
+                document.getElementById('loginScreen').style.display = 'flex';
+                document.getElementById('content').style.display = 'none';
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('signOutButton').style.display = 'none';
+                document.getElementById('userInfo').style.display = 'none';
+                
+                console.log('Signed out');
+            } catch (error) {
+                console.error('Error signing out:', error);
+            }
+        }
+        
+        // Check authentication state on load
         window.addEventListener('load', () => {
-            // Show loading message
-            showError('Establishing P2P connection...');
-            // Don't load any data until P2P is connected
-            initP2P();
-            // Initialize map (doesn't require P2P)
+            // Initialize map (doesn't require auth or P2P)
             initMap();
+            
+            // Check if user is already signed in
+            auth.onAuthStateChanged(async (user) => {
+                if (user) {
+                    currentUser = user;
+                    console.log('User already signed in:', user.email);
+                    document.getElementById('userInfo').textContent = `Signed in as: ${user.email}`;
+                    document.getElementById('userInfo').style.display = 'block';
+                    document.getElementById('signOutButton').style.display = 'block';
+                    await loadDeviceConnection();
+                } else {
+                    // Show login screen
+                    document.getElementById('loginScreen').style.display = 'flex';
+                    document.getElementById('content').style.display = 'none';
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('signOutButton').style.display = 'none';
+                }
+            });
         });
         
         // Initialize map
