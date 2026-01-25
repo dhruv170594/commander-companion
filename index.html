@@ -828,6 +828,7 @@
         // This is especially important on mobile where redirect is the primary method
         auth.getRedirectResult().then((result) => {
             redirectResultProcessed = true;
+            console.log('Redirect result received:', result.user ? 'User signed in' : 'No user');
             
             if (result.user) {
                 // User signed in via redirect
@@ -837,8 +838,17 @@
                 // Keep login screen visible - loadDeviceConnection will hide it when ready
                 document.getElementById('loginScreen').style.display = 'flex';
                 document.getElementById('content').style.display = 'none';
-                loadDeviceConnection().finally(() => {
+                loadDeviceConnection().then(() => {
                     isHandlingAuth = false;
+                    console.log('Device connection loaded after redirect');
+                }).catch((error) => {
+                    isHandlingAuth = false;
+                    console.error('Error loading device connection after redirect:', error);
+                    // Still show UI even if device connection fails
+                    document.getElementById('loginScreen').style.display = 'none';
+                    document.getElementById('content').style.display = 'block';
+                    document.getElementById('signOutButton').style.display = 'block';
+                    showError('Car is off or not connected. The interface is available but controls are disabled.');
                 });
             } else if (result.credential) {
                 // Fallback for older Firebase versions
@@ -849,8 +859,17 @@
                     // Keep login screen visible - loadDeviceConnection will hide it when ready
                     document.getElementById('loginScreen').style.display = 'flex';
                     document.getElementById('content').style.display = 'none';
-                    loadDeviceConnection().finally(() => {
+                    loadDeviceConnection().then(() => {
                         isHandlingAuth = false;
+                        console.log('Device connection loaded after redirect (credential)');
+                    }).catch((error) => {
+                        isHandlingAuth = false;
+                        console.error('Error loading device connection after redirect:', error);
+                        // Still show UI even if device connection fails
+                        document.getElementById('loginScreen').style.display = 'none';
+                        document.getElementById('content').style.display = 'block';
+                        document.getElementById('signOutButton').style.display = 'block';
+                        showError('Car is off or not connected. The interface is available but controls are disabled.');
                     });
                 } else {
                     isHandlingAuth = false;
@@ -1296,95 +1315,81 @@
         
         // Sign out function
         async function signOut() {
+            console.log('Sign out initiated');
+            
+            // Disable sign out button to prevent double-clicks
+            const signOutButton = document.getElementById('signOutButton');
+            if (signOutButton) {
+                signOutButton.disabled = true;
+                signOutButton.textContent = 'Signing out...';
+            }
+            
+            // Immediately show login screen (don't wait for async operations)
+            document.getElementById('loginScreen').style.display = 'flex';
+            document.getElementById('content').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('signOutButton').style.display = 'none';
+            document.getElementById('userInfo').style.display = 'none';
+            hideError();
+            
+            // Clear local state immediately
+            currentUser = null;
+            deviceConnectionInfo = null;
+            isHandlingAuth = false;
+            
+            // Stop any update intervals
+            if (updateInterval) {
+                clearInterval(updateInterval);
+                updateInterval = null;
+            }
+            
+            // Close P2P connection (non-blocking)
             try {
-                console.log('Sign out initiated');
-                
-                // Disable sign out button to prevent double-clicks
-                const signOutButton = document.getElementById('signOutButton');
-                if (signOutButton) {
-                    signOutButton.disabled = true;
-                    signOutButton.textContent = 'Signing out...';
+                if (signalingSocket) {
+                    signalingSocket.close();
+                    signalingSocket = null;
                 }
-                
-                // Close P2P connection
-                try {
-                    if (signalingSocket) {
-                        signalingSocket.close();
-                        signalingSocket = null;
-                    }
-                    if (peerConnection) {
-                        peerConnection.close();
-                        peerConnection = null;
-                    }
-                    if (dataChannel) {
-                        dataChannel.close();
-                        dataChannel = null;
-                    }
-                    useP2P = false;
-                } catch (p2pError) {
-                    console.warn('Error closing P2P connection:', p2pError);
+                if (peerConnection) {
+                    peerConnection.close();
+                    peerConnection = null;
                 }
-                
-                // Clear Firebase signaling
+                if (dataChannel) {
+                    dataChannel.close();
+                    dataChannel = null;
+                }
+                useP2P = false;
+            } catch (p2pError) {
+                console.warn('Error closing P2P connection:', p2pError);
+            }
+            
+            // Clear Firebase signaling (non-blocking)
+            if (currentUser) {
                 try {
-                    if (currentUser) {
-                        const signalingDoc = db.collection('webrtcSignaling').doc(currentUser.uid);
-                        await signalingDoc.delete().catch(e => {
-                            console.warn('Error deleting signaling doc:', e);
-                        });
-                    }
+                    const signalingDoc = db.collection('webrtcSignaling').doc(currentUser.uid);
+                    signalingDoc.delete().catch(e => {
+                        console.warn('Error deleting signaling doc:', e);
+                    });
                 } catch (signalingError) {
                     console.warn('Error clearing Firebase signaling:', signalingError);
                 }
-                
-                // Sign out from Firebase
-                try {
-                    await auth.signOut();
-                    console.log('Firebase sign out successful');
-                } catch (authError) {
-                    console.error('Error signing out from Firebase:', authError);
-                    // Continue anyway - clear local state
-                }
-                
-                // Clear local state
-                currentUser = null;
-                deviceConnectionInfo = null;
-                isHandlingAuth = false;
-                
-                // Stop any update intervals
-                if (updateInterval) {
-                    clearInterval(updateInterval);
-                    updateInterval = null;
-                }
-                
-                // Show login screen
-                document.getElementById('loginScreen').style.display = 'flex';
-                document.getElementById('content').style.display = 'none';
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('signOutButton').style.display = 'none';
-                document.getElementById('userInfo').style.display = 'none';
-                
-                // Reset sign out button
-                if (signOutButton) {
-                    signOutButton.disabled = false;
-                    signOutButton.textContent = 'Sign Out';
-                }
-                
-                // Clear error message
-                hideError();
-                
-                console.log('Signed out successfully');
-            } catch (error) {
-                console.error('Error signing out:', error);
-                showError('Error signing out: ' + error.message);
-                
-                // Re-enable sign out button on error
-                const signOutButton = document.getElementById('signOutButton');
-                if (signOutButton) {
-                    signOutButton.disabled = false;
-                    signOutButton.textContent = 'Sign Out';
-                }
             }
+            
+            // Sign out from Firebase (this will trigger onAuthStateChanged)
+            try {
+                await auth.signOut();
+                console.log('Firebase sign out successful');
+            } catch (authError) {
+                console.error('Error signing out from Firebase:', authError);
+                // Even if sign out fails, we've already cleared the UI
+            }
+            
+            // Reset sign out button
+            if (signOutButton) {
+                signOutButton.disabled = false;
+                signOutButton.textContent = 'Sign Out';
+            }
+            
+            console.log('Signed out successfully');
         }
         
         // Check authentication state on load
@@ -1402,6 +1407,8 @@
                 
                 // Now set up auth state listener (only after redirect result is processed)
                 auth.onAuthStateChanged(async (user) => {
+                    console.log('Auth state changed:', user ? `User: ${user.email}` : 'No user');
+                    
                     // Skip if we're already handling redirect result
                     if (isHandlingAuth) {
                         console.log('Skipping onAuthStateChanged - already handling redirect result');
@@ -1424,11 +1431,16 @@
                         // loadDeviceConnection will hide it when ready
                         await loadDeviceConnection();
                     } else {
-                        // Show login screen
+                        // User signed out - show login screen
+                        console.log('User signed out, showing login screen');
+                        currentUser = null;
+                        deviceConnectionInfo = null;
                         document.getElementById('loginScreen').style.display = 'flex';
                         document.getElementById('content').style.display = 'none';
                         document.getElementById('loading').style.display = 'none';
                         document.getElementById('signOutButton').style.display = 'none';
+                        document.getElementById('userInfo').style.display = 'none';
+                        hideError();
                     }
                 });
             };
