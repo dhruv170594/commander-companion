@@ -449,6 +449,19 @@
             auth = firebase.auth();
             db = firebase.firestore();
             
+            // Enable Firestore offline persistence (helps with network issues)
+            db.enablePersistence({
+                synchronizeTabs: false
+            }).catch((err) => {
+                if (err.code === 'failed-precondition') {
+                    console.warn('Firestore persistence failed: Multiple tabs open');
+                } else if (err.code === 'unimplemented') {
+                    console.warn('Firestore persistence not available in this browser');
+                } else {
+                    console.warn('Firestore persistence error:', err);
+                }
+            });
+            
             // Test Firebase connectivity
             console.log('Firebase initialized successfully');
             console.log('Current domain:', window.location.hostname);
@@ -655,13 +668,17 @@
                     console.log('Signed in as:', currentUser.email);
                     
                     // Update Firestore (same way as Commander app - fire-and-forget)
+                    console.log('Attempting to update Firestore for user:', currentUser.uid);
                     db.collection('deviceConnections').doc(currentUser.uid).update({
                         companionAppSignedIn: true,
                         lastCompanionSignIn: firebase.firestore.Timestamp.now()
                     }).then(() => {
                         console.log('✓ Firestore updated: companion app user signed in');
                     }).catch((e) => {
-                        console.warn('Failed to update Firestore sign-in status:', e);
+                        console.error('✗ FAILED to update Firestore sign-in status:', e);
+                        console.error('Error code:', e.code);
+                        console.error('Error message:', e.message);
+                        console.error('This might be blocked by Cloudflare or network issues');
                     });
                     
                     // Load device connection and show app (same flow as Commander app)
@@ -846,13 +863,17 @@
                 console.log('Signed in via redirect as:', currentUser.email);
                 
                 // Update Firestore (same way as Commander app - fire-and-forget)
+                console.log('Attempting to update Firestore for user:', currentUser.uid);
                 db.collection('deviceConnections').doc(currentUser.uid).update({
                     companionAppSignedIn: true,
                     lastCompanionSignIn: firebase.firestore.Timestamp.now()
                 }).then(() => {
                     console.log('✓ Firestore updated: companion app user signed in (redirect)');
                 }).catch((e) => {
-                    console.warn('Failed to update Firestore sign-in status:', e);
+                    console.error('✗ FAILED to update Firestore sign-in status:', e);
+                    console.error('Error code:', e.code);
+                    console.error('Error message:', e.message);
+                    console.error('This might be blocked by Cloudflare or network issues');
                 });
                 
                 // IMMEDIATELY show app page (don't wait for device connection)
@@ -875,13 +896,17 @@
                 console.log('Signed in via redirect (credential) as:', currentUser?.email);
                 if (currentUser) {
                     // Update Firestore (same way as Commander app - fire-and-forget)
+                    console.log('Attempting to update Firestore for user:', currentUser.uid);
                     db.collection('deviceConnections').doc(currentUser.uid).update({
                         companionAppSignedIn: true,
                         lastCompanionSignIn: firebase.firestore.Timestamp.now()
                     }).then(() => {
                         console.log('✓ Firestore updated: companion app user signed in (credential)');
                     }).catch((e) => {
-                        console.warn('Failed to update Firestore sign-in status:', e);
+                        console.error('✗ FAILED to update Firestore sign-in status:', e);
+                        console.error('Error code:', e.code);
+                        console.error('Error message:', e.message);
+                        console.error('This might be blocked by Cloudflare or network issues');
                     });
                     
                     // IMMEDIATELY show app page (don't wait for device connection)
@@ -932,13 +957,18 @@
                 showError('Looking up your car...');
                 
                 // Try to get device connection info with offline support
+                console.log('Attempting to load device connection from Firestore for user:', currentUser.uid);
                 let deviceDoc;
                 let isOffline = false;
                 try {
                     deviceDoc = await db.collection('deviceConnections').doc(currentUser.uid).get({ source: 'server' });
+                    console.log('✓ Firestore document retrieved:', deviceDoc.exists ? 'exists' : 'does not exist');
                 } catch (error) {
                     // If server fetch fails, try cache
-                    console.warn('Server fetch failed, trying cache:', error);
+                    console.error('✗ Server fetch FAILED:', error);
+                    console.error('Error code:', error.code);
+                    console.error('Error message:', error.message);
+                    console.error('This might be blocked by Cloudflare or network issues');
                     try {
                         deviceDoc = await db.collection('deviceConnections').doc(currentUser.uid).get({ source: 'cache' });
                         isOffline = true;
@@ -1269,6 +1299,8 @@
             const urlString = typeof url === 'string' ? url : url.toString();
             const isFirebaseRequest = urlString.includes('firebase') || 
                                      urlString.includes('googleapis.com') || 
+                                     urlString.includes('firestore.googleapis.com') ||
+                                     urlString.includes('firebasestorage.googleapis.com') ||
                                      urlString.includes('google.com') ||
                                      urlString.includes('accounts.google.com') ||
                                      urlString.includes('identitytoolkit') ||
@@ -1277,6 +1309,7 @@
             
             if (isFirebaseRequest) {
                 // Use original fetch for Firebase/Google requests - bypass P2P
+                console.log('Bypassing P2P for Firebase request:', urlString);
                 return originalFetch.apply(this, arguments);
             }
             
@@ -1465,13 +1498,17 @@
                         console.log('User already signed in:', user.email);
                         
                         // Update Firestore (same way as Commander app - fire-and-forget)
+                        console.log('Attempting to update Firestore for user:', user.uid);
                         db.collection('deviceConnections').doc(user.uid).update({
                             companionAppSignedIn: true,
                             lastCompanionSignIn: firebase.firestore.Timestamp.now()
                         }).then(() => {
                             console.log('✓ Firestore updated: companion app user signed in');
                         }).catch((e) => {
-                            console.warn('Failed to update Firestore sign-in status:', e);
+                            console.error('✗ FAILED to update Firestore sign-in status:', e);
+                            console.error('Error code:', e.code);
+                            console.error('Error message:', e.message);
+                            console.error('This might be blocked by Cloudflare or network issues');
                         });
                         
                         // IMMEDIATELY show app page (don't wait for device connection)
