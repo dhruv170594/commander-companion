@@ -654,20 +654,17 @@
                     currentUser = result.user;
                     console.log('Signed in as:', currentUser.email);
                     
-                    // Update Firestore to record companion app sign-in (separate from Commander app)
-                    try {
-                        await db.collection('deviceConnections').doc(currentUser.uid).update({
-                            companionAppSignedIn: true,
-                            lastCompanionSignIn: firebase.firestore.Timestamp.now()
-                            // Note: userSignedIn is for Commander app only
-                        });
-                        console.log('Updated Firestore: companion app user signed in (popup)');
-                    } catch (firestoreError) {
-                        console.warn('Failed to update Firestore sign-in status:', firestoreError);
-                    }
+                    // Update Firestore (same way as Commander app - fire-and-forget)
+                    db.collection('deviceConnections').doc(currentUser.uid).update({
+                        companionAppSignedIn: true,
+                        lastCompanionSignIn: firebase.firestore.Timestamp.now()
+                    }).then(() => {
+                        console.log('✓ Firestore updated: companion app user signed in');
+                    }).catch((e) => {
+                        console.warn('Failed to update Firestore sign-in status:', e);
+                    });
                     
-                    // Keep login screen visible during device connection lookup
-                    // loadDeviceConnection will hide it when ready
+                    // Load device connection and show app (same flow as Commander app)
                     await loadDeviceConnection();
                     return;
                 } catch (popupError) {
@@ -848,30 +845,28 @@
                 currentUser = result.user;
                 console.log('Signed in via redirect as:', currentUser.email);
                 
-                // Update Firestore to record companion app sign-in (separate from Commander app)
+                // Update Firestore (same way as Commander app - fire-and-forget)
                 db.collection('deviceConnections').doc(currentUser.uid).update({
                     companionAppSignedIn: true,
                     lastCompanionSignIn: firebase.firestore.Timestamp.now()
-                    // Note: userSignedIn is for Commander app only
                 }).then(() => {
-                    console.log('Updated Firestore: companion app user signed in (redirect)');
-                }).catch((firestoreError) => {
-                    console.warn('Failed to update Firestore sign-in status:', firestoreError);
+                    console.log('✓ Firestore updated: companion app user signed in (redirect)');
+                }).catch((e) => {
+                    console.warn('Failed to update Firestore sign-in status:', e);
                 });
                 
-                // Keep login screen visible - loadDeviceConnection will hide it when ready
-                document.getElementById('loginScreen').style.display = 'flex';
-                document.getElementById('content').style.display = 'none';
+                // Load device connection and show app (same flow as Commander app)
                 loadDeviceConnection().then(() => {
                     isHandlingAuth = false;
-                    console.log('Device connection loaded after redirect');
                 }).catch((error) => {
                     isHandlingAuth = false;
-                    console.error('Error loading device connection after redirect:', error);
+                    console.error('Error loading device connection:', error);
                     // Still show UI even if device connection fails
                     document.getElementById('loginScreen').style.display = 'none';
                     document.getElementById('content').style.display = 'block';
                     document.getElementById('signOutButton').style.display = 'block';
+                    document.getElementById('userInfo').textContent = `Signed in as: ${currentUser.email}`;
+                    document.getElementById('userInfo').style.display = 'block';
                     showError('Car is off or not connected. The interface is available but controls are disabled.');
                 });
             } else if (result.credential) {
@@ -880,30 +875,28 @@
                 currentUser = result.user;
                 console.log('Signed in via redirect (credential) as:', currentUser?.email);
                 if (currentUser) {
-                    // Update Firestore to record companion app sign-in (separate from Commander app)
+                    // Update Firestore (same way as Commander app - fire-and-forget)
                     db.collection('deviceConnections').doc(currentUser.uid).update({
                         companionAppSignedIn: true,
                         lastCompanionSignIn: firebase.firestore.Timestamp.now()
-                        // Note: userSignedIn is for Commander app only
                     }).then(() => {
-                        console.log('Updated Firestore: companion app user signed in (credential)');
-                    }).catch((firestoreError) => {
-                        console.warn('Failed to update Firestore sign-in status:', firestoreError);
+                        console.log('✓ Firestore updated: companion app user signed in (credential)');
+                    }).catch((e) => {
+                        console.warn('Failed to update Firestore sign-in status:', e);
                     });
                     
-                    // Keep login screen visible - loadDeviceConnection will hide it when ready
-                    document.getElementById('loginScreen').style.display = 'flex';
-                    document.getElementById('content').style.display = 'none';
+                    // Load device connection and show app (same flow as Commander app)
                     loadDeviceConnection().then(() => {
                         isHandlingAuth = false;
-                        console.log('Device connection loaded after redirect (credential)');
                     }).catch((error) => {
                         isHandlingAuth = false;
-                        console.error('Error loading device connection after redirect:', error);
+                        console.error('Error loading device connection:', error);
                         // Still show UI even if device connection fails
                         document.getElementById('loginScreen').style.display = 'none';
                         document.getElementById('content').style.display = 'block';
                         document.getElementById('signOutButton').style.display = 'block';
+                        document.getElementById('userInfo').textContent = `Signed in as: ${currentUser.email}`;
+                        document.getElementById('userInfo').style.display = 'block';
                         showError('Car is off or not connected. The interface is available but controls are disabled.');
                     });
                 } else {
@@ -929,14 +922,12 @@
         async function loadDeviceConnection() {
             if (!currentUser) {
                 showError('Please sign in first');
-                // Keep login screen visible
                 document.getElementById('loginScreen').style.display = 'flex';
                 document.getElementById('content').style.display = 'none';
                 return;
             }
             
             try {
-                // Keep login screen visible and show loading during lookup
                 document.getElementById('loginScreen').style.display = 'flex';
                 document.getElementById('content').style.display = 'none';
                 document.getElementById('loading').style.display = 'block';
@@ -962,12 +953,14 @@
                     }
                 }
                 
-                // NOW hide login screen and show UI (only after we've checked authentication and device connection)
+                // NOW show app page (after Firestore update and connection check)
                 document.getElementById('loginScreen').style.display = 'none';
                 document.getElementById('content').style.display = 'block';
                 document.getElementById('signOutButton').style.display = 'block';
+                document.getElementById('userInfo').textContent = `Signed in as: ${currentUser.email}`;
+                document.getElementById('userInfo').style.display = 'block';
                 
-                // If no document or car is off, show UI with red bar
+                // If no document or car is off, show red bar
                 if (!deviceDoc || !deviceDoc.exists) {
                     console.log('No device connection found or car is off');
                     // Show red bar (car is off)
@@ -1020,33 +1013,26 @@
             } catch (error) {
                 console.error('Error loading device connection:', error);
                 
-                // Only show UI if user is actually authenticated
-                if (currentUser && auth.currentUser) {
-                    // User is authenticated, show UI even on error
-                    document.getElementById('loginScreen').style.display = 'none';
-                    document.getElementById('content').style.display = 'block';
-                    document.getElementById('signOutButton').style.display = 'block';
-                    
-                    // Show red bar (car is off/error)
-                    const connectionBar = document.getElementById('connectionBar');
-                    if (connectionBar) {
-                        connectionBar.className = 'connection-bar'; // Red
-                    }
-                    
-                    document.getElementById('loading').style.display = 'none';
-                    
-                    // Check if it's an offline error
-                    if (error.code === 'unavailable' || error.message.includes('offline')) {
-                        showError('Car is off or unreachable. The interface is available but controls are disabled.');
-                    } else {
-                        showError('Failed to load car connection: ' + error.message);
-                    }
+                // Show UI even on error (Firestore update already completed)
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+                document.getElementById('signOutButton').style.display = 'block';
+                document.getElementById('userInfo').textContent = `Signed in as: ${currentUser.email}`;
+                document.getElementById('userInfo').style.display = 'block';
+                
+                // Show red bar (car is off/error)
+                const connectionBar = document.getElementById('connectionBar');
+                if (connectionBar) {
+                    connectionBar.className = 'connection-bar'; // Red
+                }
+                
+                document.getElementById('loading').style.display = 'none';
+                
+                // Check if it's an offline error
+                if (error.code === 'unavailable' || error.message.includes('offline')) {
+                    showError('Car is off or unreachable. The interface is available but controls are disabled.');
                 } else {
-                    // User not authenticated, keep login screen
-                    document.getElementById('loginScreen').style.display = 'flex';
-                    document.getElementById('content').style.display = 'none';
-                    document.getElementById('loading').style.display = 'none';
-                    showError('Authentication failed. Please try signing in again.');
+                    showError('Failed to load car connection: ' + error.message);
                 }
             }
         }
@@ -1479,12 +1465,28 @@
                         
                         currentUser = user;
                         console.log('User already signed in:', user.email);
-                        document.getElementById('userInfo').textContent = `Signed in as: ${user.email}`;
-                        document.getElementById('userInfo').style.display = 'block';
-                        document.getElementById('signOutButton').style.display = 'block';
-                        // Keep login screen visible during device connection lookup
-                        // loadDeviceConnection will hide it when ready
-                        await loadDeviceConnection();
+                        
+                        // Update Firestore (same way as Commander app - fire-and-forget)
+                        db.collection('deviceConnections').doc(user.uid).update({
+                            companionAppSignedIn: true,
+                            lastCompanionSignIn: firebase.firestore.Timestamp.now()
+                        }).then(() => {
+                            console.log('✓ Firestore updated: companion app user signed in');
+                        }).catch((e) => {
+                            console.warn('Failed to update Firestore sign-in status:', e);
+                        });
+                        
+                        // Load device connection and show app (same flow as Commander app)
+                        loadDeviceConnection().catch((error) => {
+                            console.error('Error loading device connection:', error);
+                            // Still show UI even if device connection fails
+                            document.getElementById('loginScreen').style.display = 'none';
+                            document.getElementById('content').style.display = 'block';
+                            document.getElementById('signOutButton').style.display = 'block';
+                            document.getElementById('userInfo').textContent = `Signed in as: ${user.email}`;
+                            document.getElementById('userInfo').style.display = 'block';
+                            showError('Car is off or not connected. The interface is available but controls are disabled.');
+                        });
                     } else {
                         // User signed out - show login screen
                         console.log('User signed out, showing login screen');
