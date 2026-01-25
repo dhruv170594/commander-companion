@@ -462,6 +462,24 @@
                 }
             });
             
+            // Monitor Firestore connectivity
+            db.settings({
+                cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED
+            });
+            
+            // Listen for Firestore connectivity issues
+            db.collection('_').limit(0).get().then(() => {
+                console.log('✓ Firestore connectivity test: SUCCESS');
+            }).catch((err) => {
+                console.error('✗ Firestore connectivity test: FAILED');
+                console.error('Firestore error:', err.code, err.message);
+                console.error('This indicates Firestore is blocked or unreachable');
+                console.error('Possible causes:');
+                console.error('1. Cloudflare blocking firestore.googleapis.com');
+                console.error('2. Network connectivity issues');
+                console.error('3. Firestore security rules blocking access');
+            });
+            
             // Test Firebase connectivity
             console.log('Firebase initialized successfully');
             console.log('Current domain:', window.location.hostname);
@@ -961,14 +979,29 @@
                 let deviceDoc;
                 let isOffline = false;
                 try {
-                    deviceDoc = await db.collection('deviceConnections').doc(currentUser.uid).get({ source: 'server' });
+                    // Use a timeout to detect if Firestore is completely blocked
+                    const timeoutPromise = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Firestore request timeout - likely blocked by Cloudflare')), 10000)
+                    );
+                    
+                    const fetchPromise = db.collection('deviceConnections').doc(currentUser.uid).get({ source: 'server' });
+                    deviceDoc = await Promise.race([fetchPromise, timeoutPromise]);
                     console.log('✓ Firestore document retrieved:', deviceDoc.exists ? 'exists' : 'does not exist');
                 } catch (error) {
                     // If server fetch fails, try cache
                     console.error('✗ Server fetch FAILED:', error);
                     console.error('Error code:', error.code);
                     console.error('Error message:', error.message);
-                    console.error('This might be blocked by Cloudflare or network issues');
+                    console.error('');
+                    console.error('=== CLOUDFLARE BLOCKING DETECTED ===');
+                    console.error('Firestore requests are being blocked. This is likely Cloudflare blocking firestore.googleapis.com');
+                    console.error('');
+                    console.error('SOLUTION: Configure Cloudflare to allow Firestore:');
+                    console.error('1. Go to Cloudflare Dashboard → Security → WAF');
+                    console.error('2. Add an ALLOW rule for: *.googleapis.com');
+                    console.error('3. Or temporarily disable WAF to test');
+                    console.error('4. Check Rate Limiting settings');
+                    console.error('===================================');
                     try {
                         deviceDoc = await db.collection('deviceConnections').doc(currentUser.uid).get({ source: 'cache' });
                         isOffline = true;
