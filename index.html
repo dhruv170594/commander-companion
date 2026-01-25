@@ -575,19 +575,38 @@
                 console.log('Provider:', provider);
                 console.log('Auth object:', auth);
                 console.log('Current URL:', window.location.href);
+                console.log('Protocol:', window.location.protocol);
+                console.log('Is HTTPS:', window.location.protocol === 'https:');
                 
                 // Set the redirect URL explicitly
                 const redirectUrl = window.location.origin + window.location.pathname;
                 console.log('Redirect URL will be:', redirectUrl);
+                
+                // Test if we can reach Google OAuth directly
+                console.log('Testing Google OAuth connectivity...');
+                try {
+                    const testUrl = 'https://accounts.google.com/.well-known/openid-configuration';
+                    const testResponse = await fetch(testUrl, { 
+                        method: 'HEAD', 
+                        mode: 'no-cors',
+                        cache: 'no-cache'
+                    });
+                    console.log('✓ Google OAuth domain is reachable');
+                } catch (testError) {
+                    console.warn('⚠ Google OAuth connectivity test failed (may be normal due to CORS):', testError);
+                }
                 
                 showError('Redirecting to Google sign-in...');
                 
                 // Use redirect directly - it's more reliable for network issues
                 // Wrap in try-catch to see if the redirect call itself fails
                 try {
-                    // Try to set the redirect URL if the API supports it
-                    // Note: Firebase handles redirect URL automatically, but we can try to help
                     console.log('Calling signInWithRedirect...');
+                    console.log('If this fails, check browser Network tab for blocked requests to:');
+                    console.log('- identitytoolkit.googleapis.com');
+                    console.log('- securetoken.googleapis.com');
+                    console.log('- accounts.google.com');
+                    console.log('- oauth2.googleapis.com');
                     
                     // Use a promise with timeout to detect if it hangs
                     const redirectPromise = auth.signInWithRedirect(provider);
@@ -602,9 +621,17 @@
                     console.error('signInWithRedirect call failed:', redirectError);
                     console.error('This usually means Firebase cannot reach Google OAuth servers');
                     console.error('Possible causes:');
-                    console.error('1. Cloudflare blocking Firebase/Google requests');
+                    console.error('1. Browser blocking third-party requests');
                     console.error('2. Network connectivity issues');
                     console.error('3. CORS configuration problems');
+                    console.error('4. Firebase SDK version compatibility');
+                    console.error('');
+                    console.error('ACTION REQUIRED:');
+                    console.error('1. Open browser DevTools → Network tab');
+                    console.error('2. Try signing in again');
+                    console.error('3. Look for failed/blocked requests (red entries)');
+                    console.error('4. Check if requests to *.googleapis.com are being made');
+                    console.error('5. Check browser console for CORS errors');
                     throw redirectError; // Re-throw to be caught by outer catch
                 }
                 
@@ -651,19 +678,28 @@
                 let errorMessage = 'Failed to sign in: ' + error.message;
                 
                 if (error.code === 'auth/network-request-failed') {
-                    errorMessage = `Network error: Firebase authentication servers are not reachable.\n\n` +
-                        `This could be due to:\n` +
-                        `1. Cloudflare blocking Firebase requests (check Cloudflare firewall rules)\n` +
-                        `2. CORS issues (check browser Network tab for blocked requests)\n` +
-                        `3. Network connectivity issues\n` +
-                        `4. Firebase services temporarily unavailable\n\n` +
-                        `Troubleshooting:\n` +
-                        `- Open browser DevTools → Network tab\n` +
-                        `- Try signing in again\n` +
-                        `- Look for failed requests to *.firebaseapp.com or *.googleapis.com\n` +
-                        `- Check if requests are being blocked by Cloudflare\n\n` +
+                    errorMessage = `Network error: Firebase cannot reach Google OAuth servers.\n\n` +
+                        `Since Cloudflare proxy is disabled, this might be:\n` +
+                        `1. Browser blocking third-party requests\n` +
+                        `2. CORS issues\n` +
+                        `3. Firebase SDK connectivity problem\n\n` +
+                        `DIAGNOSTIC STEPS:\n` +
+                        `1. Open browser DevTools (F12) → Network tab\n` +
+                        `2. Click "Sign in with Google" again\n` +
+                        `3. Look for RED/BLOCKED requests to:\n` +
+                        `   - identitytoolkit.googleapis.com\n` +
+                        `   - securetoken.googleapis.com\n` +
+                        `   - accounts.google.com\n` +
+                        `   - oauth2.googleapis.com\n\n` +
+                        `4. Check Console tab for CORS errors\n` +
+                        `5. Try in a different browser (Chrome, Firefox, Safari)\n` +
+                        `6. Try in incognito/private mode\n\n` +
+                        `If requests are being made but failing, check:\n` +
+                        `- Browser extensions blocking requests\n` +
+                        `- Corporate firewall/proxy\n` +
+                        `- VPN interference\n\n` +
                         `Current domain: ${window.location.hostname}\n` +
-                        `Firebase auth domain: ${firebaseConfig.authDomain}`;
+                        `Protocol: ${window.location.protocol}`;
                 } else if (error.code === 'auth/unauthorized-domain') {
                     errorMessage = `Domain not authorized!\n\n` +
                         `Please add "${window.location.hostname}" to Firebase authorized domains:\n` +
