@@ -654,6 +654,18 @@
                     currentUser = result.user;
                     console.log('Signed in as:', currentUser.email);
                     
+                    // Update Firestore to record companion app sign-in
+                    try {
+                        await db.collection('deviceConnections').doc(currentUser.uid).set({
+                            userSignedIn: true,
+                            lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
+                            companionAppSignedIn: true
+                        }, { merge: true });
+                        console.log('Updated Firestore: companion app user signed in (popup)');
+                    } catch (firestoreError) {
+                        console.warn('Failed to update Firestore sign-in status:', firestoreError);
+                    }
+                    
                     // Keep login screen visible during device connection lookup
                     // loadDeviceConnection will hide it when ready
                     await loadDeviceConnection();
@@ -835,6 +847,18 @@
                 isHandlingAuth = true;
                 currentUser = result.user;
                 console.log('Signed in via redirect as:', currentUser.email);
+                
+                // Update Firestore to record companion app sign-in
+                db.collection('deviceConnections').doc(currentUser.uid).set({
+                    userSignedIn: true,
+                    lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
+                    companionAppSignedIn: true
+                }, { merge: true }).then(() => {
+                    console.log('Updated Firestore: companion app user signed in (redirect)');
+                }).catch((firestoreError) => {
+                    console.warn('Failed to update Firestore sign-in status:', firestoreError);
+                });
+                
                 // Keep login screen visible - loadDeviceConnection will hide it when ready
                 document.getElementById('loginScreen').style.display = 'flex';
                 document.getElementById('content').style.display = 'none';
@@ -856,6 +880,17 @@
                 currentUser = result.user;
                 console.log('Signed in via redirect (credential) as:', currentUser?.email);
                 if (currentUser) {
+                    // Update Firestore to record companion app sign-in
+                    db.collection('deviceConnections').doc(currentUser.uid).set({
+                        userSignedIn: true,
+                        lastSignIn: firebase.firestore.FieldValue.serverTimestamp(),
+                        companionAppSignedIn: true
+                    }, { merge: true }).then(() => {
+                        console.log('Updated Firestore: companion app user signed in (credential)');
+                    }).catch((firestoreError) => {
+                        console.warn('Failed to update Firestore sign-in status:', firestoreError);
+                    });
+                    
                     // Keep login screen visible - loadDeviceConnection will hide it when ready
                     document.getElementById('loginScreen').style.display = 'flex';
                     document.getElementById('content').style.display = 'none';
@@ -1332,6 +1367,13 @@
             document.getElementById('userInfo').style.display = 'none';
             hideError();
             
+            // Reset sign-in button text and state
+            const signInButton = document.getElementById('googleSignInButton');
+            if (signInButton) {
+                signInButton.disabled = false;
+                signInButton.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Sign in with Google';
+            }
+            
             // Clear local state immediately
             currentUser = null;
             deviceConnectionInfo = null;
@@ -1363,11 +1405,21 @@
             }
             
             // Clear Firebase signaling (non-blocking)
-            if (currentUser) {
+            const userIdBeforeSignOut = currentUser ? currentUser.uid : null;
+            if (userIdBeforeSignOut) {
                 try {
-                    const signalingDoc = db.collection('webrtcSignaling').doc(currentUser.uid);
+                    const signalingDoc = db.collection('webrtcSignaling').doc(userIdBeforeSignOut);
                     signalingDoc.delete().catch(e => {
                         console.warn('Error deleting signaling doc:', e);
+                    });
+                    
+                    // Update Firestore to record sign-out from companion app
+                    db.collection('deviceConnections').doc(userIdBeforeSignOut).update({
+                        userSignedIn: false,
+                        lastSignOut: firebase.firestore.FieldValue.serverTimestamp(),
+                        companionAppSignedIn: false
+                    }).catch(e => {
+                        console.warn('Error updating Firestore sign-out status:', e);
                     });
                 } catch (signalingError) {
                     console.warn('Error clearing Firebase signaling:', signalingError);
