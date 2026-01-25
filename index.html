@@ -574,27 +574,37 @@
                 console.log('Initiating redirect sign-in...');
                 console.log('Provider:', provider);
                 console.log('Auth object:', auth);
+                console.log('Current URL:', window.location.href);
                 
-                // Test if we can reach Firebase first
-                try {
-                    console.log('Testing Firebase auth connectivity...');
-                    // This is a lightweight check
-                    const testAuth = firebase.auth();
-                    console.log('Auth object created successfully');
-                } catch (testError) {
-                    console.error('Auth test failed:', testError);
-                }
+                // Set the redirect URL explicitly
+                const redirectUrl = window.location.origin + window.location.pathname;
+                console.log('Redirect URL will be:', redirectUrl);
                 
                 showError('Redirecting to Google sign-in...');
                 
                 // Use redirect directly - it's more reliable for network issues
                 // Wrap in try-catch to see if the redirect call itself fails
                 try {
-                    await auth.signInWithRedirect(provider);
+                    // Try to set the redirect URL if the API supports it
+                    // Note: Firebase handles redirect URL automatically, but we can try to help
+                    console.log('Calling signInWithRedirect...');
+                    
+                    // Use a promise with timeout to detect if it hangs
+                    const redirectPromise = auth.signInWithRedirect(provider);
+                    const timeoutPromise = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Redirect timeout - Firebase may be blocked')), 10000)
+                    );
+                    
+                    await Promise.race([redirectPromise, timeoutPromise]);
                     console.log('Redirect initiated successfully');
                     return; // Will redirect, so we won't reach here
                 } catch (redirectError) {
                     console.error('signInWithRedirect call failed:', redirectError);
+                    console.error('This usually means Firebase cannot reach Google OAuth servers');
+                    console.error('Possible causes:');
+                    console.error('1. Cloudflare blocking Firebase/Google requests');
+                    console.error('2. Network connectivity issues');
+                    console.error('3. CORS configuration problems');
                     throw redirectError; // Re-throw to be caught by outer catch
                 }
                 
