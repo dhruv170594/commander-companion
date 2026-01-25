@@ -1109,6 +1109,21 @@
         // Override fetch to use P2P WebRTC data channel - no fallback
         const originalFetch = window.fetch;
         window.fetch = async function(url, options = {}) {
+            // CRITICAL: Don't intercept Firebase/Google API requests - they need direct HTTP
+            const urlString = typeof url === 'string' ? url : url.toString();
+            const isFirebaseRequest = urlString.includes('firebase') || 
+                                     urlString.includes('googleapis.com') || 
+                                     urlString.includes('google.com') ||
+                                     urlString.includes('accounts.google.com') ||
+                                     urlString.includes('identitytoolkit') ||
+                                     urlString.includes('securetoken') ||
+                                     urlString.includes('oauth2');
+            
+            if (isFirebaseRequest) {
+                // Use original fetch for Firebase/Google requests - bypass P2P
+                return originalFetch.apply(this, arguments);
+            }
+            
             // Only allow requests if P2P data channel is connected
             if (!useP2P || !dataChannel || dataChannel.readyState !== 'open') {
                 return Promise.reject(new Error('P2P connection not established. Please wait for connection.'));
