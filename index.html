@@ -850,36 +850,101 @@
                 document.getElementById('loading').style.display = 'block';
                 showError('Looking up your car...');
                 
-                const deviceDoc = await db.collection('deviceConnections').doc(currentUser.uid).get();
+                // Try to get device connection info with offline support
+                let deviceDoc;
+                let isOffline = false;
+                try {
+                    deviceDoc = await db.collection('deviceConnections').doc(currentUser.uid).get({ source: 'server' });
+                } catch (error) {
+                    // If server fetch fails, try cache
+                    console.warn('Server fetch failed, trying cache:', error);
+                    try {
+                        deviceDoc = await db.collection('deviceConnections').doc(currentUser.uid).get({ source: 'cache' });
+                        isOffline = true;
+                        console.log('Using cached data (car may be off)');
+                    } catch (cacheError) {
+                        // No cache either - show UI anyway if user is signed in
+                        console.warn('No cache available, showing UI anyway:', cacheError);
+                        isOffline = true;
+                        deviceDoc = null;
+                    }
+                }
                 
-                if (!deviceDoc.exists) {
-                    showError('No car found. Please enable Web Remote Control in the Commander app and make sure you\'re signed in.');
+                // Hide login screen and show UI
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+                document.getElementById('signOutButton').style.display = 'block';
+                
+                // If no document or car is off, show UI with red bar
+                if (!deviceDoc || !deviceDoc.exists) {
+                    console.log('No device connection found or car is off');
+                    // Show red bar (car is off)
+                    const connectionBar = document.getElementById('connectionBar');
+                    if (connectionBar) {
+                        connectionBar.className = 'connection-bar'; // Red (not connected)
+                    }
                     document.getElementById('loading').style.display = 'none';
+                    showError('Car is off or not connected. The interface is available but controls are disabled.');
                     return;
                 }
                 
                 const data = deviceDoc.data();
-                if (!data.enabled) {
-                    showError('Car is not connected. Please enable Web Remote Control in the Commander app.');
+                
+                // Check if user is signed in (even if car is off)
+                const userSignedIn = data.userSignedIn === true;
+                
+                if (!data.enabled && !userSignedIn) {
+                    // Car not enabled and user not signed in
+                    const connectionBar = document.getElementById('connectionBar');
+                    if (connectionBar) {
+                        connectionBar.className = 'connection-bar'; // Red
+                    }
                     document.getElementById('loading').style.display = 'none';
+                    showError('Car is not connected. Please enable Web Remote Control in the Commander app.');
                     return;
                 }
                 
                 deviceConnectionInfo = data;
                 console.log('Device connection info:', deviceConnectionInfo);
                 
-                // Hide login screen, show loading and sign out button
-                document.getElementById('loginScreen').style.display = 'none';
-                document.getElementById('loading').style.display = 'block';
-                document.getElementById('signOutButton').style.display = 'block';
-                showError('Connecting to your car...');
-                
-                // Initialize P2P connection with device info
-                await initP2P();
+                // If car is enabled, try to connect
+                if (data.enabled) {
+                    document.getElementById('loading').style.display = 'block';
+                    showError('Connecting to your car...');
+                    
+                    // Initialize P2P connection with device info
+                    await initP2P();
+                } else {
+                    // Car is off but user is signed in - show UI with red bar
+                    const connectionBar = document.getElementById('connectionBar');
+                    if (connectionBar) {
+                        connectionBar.className = 'connection-bar'; // Red (car is off)
+                    }
+                    document.getElementById('loading').style.display = 'none';
+                    showError('Car is off. The interface is available but controls are disabled.');
+                }
             } catch (error) {
                 console.error('Error loading device connection:', error);
-                showError('Failed to load car connection: ' + error.message);
+                
+                // Even on error, show UI if user is signed in
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+                document.getElementById('signOutButton').style.display = 'block';
+                
+                // Show red bar (car is off/error)
+                const connectionBar = document.getElementById('connectionBar');
+                if (connectionBar) {
+                    connectionBar.className = 'connection-bar'; // Red
+                }
+                
                 document.getElementById('loading').style.display = 'none';
+                
+                // Check if it's an offline error
+                if (error.code === 'unavailable' || error.message.includes('offline')) {
+                    showError('Car is off or unreachable. The interface is available but controls are disabled.');
+                } else {
+                    showError('Failed to load car connection: ' + error.message);
+                }
             }
         }
         
@@ -1087,7 +1152,11 @@
         function updateConnectionStatus(connected) {
             const bar = document.getElementById('connectionBar');
             if (bar) {
-                bar.className = 'connection-bar' + (connected ? ' connected' : '');
+                if (connected) {
+                    bar.className = 'connection-bar connected'; // Green when connected
+                } else {
+                    bar.className = 'connection-bar'; // Red when disconnected/car off
+                }
             }
         }
         
@@ -1443,6 +1512,15 @@
         }
         
         async function sendCommand(command, params) {
+            // Check if car is connected before sending commands
+            const connectionBar = document.getElementById('connectionBar');
+            const isConnected = connectionBar && connectionBar.classList.contains('connected');
+            
+            if (!isConnected) {
+                showError('Car is off. Controls are disabled.');
+                return;
+            }
+            
             try {
                 const response = await fetch(API_BASE + '/api/car/command', {
                     method: 'POST',
