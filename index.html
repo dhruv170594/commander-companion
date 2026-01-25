@@ -562,6 +562,22 @@
                 // Verify domain is authorized
                 console.log('Current hostname:', window.location.hostname);
                 console.log('Firebase auth domain:', firebaseConfig.authDomain);
+                console.log('Current protocol:', window.location.protocol);
+                
+                // Check if we're on HTTPS (required for Firebase auth)
+                if (window.location.protocol !== 'https:') {
+                    const errorMsg = 'Firebase authentication requires HTTPS! Current protocol: ' + window.location.protocol + '\n\n' +
+                        'Please enable SSL/TLS in Cloudflare:\n' +
+                        '1. Go to Cloudflare Dashboard → SSL/TLS\n' +
+                        '2. Set encryption mode to "Full" or "Full (strict)"\n' +
+                        '3. Make sure your site redirects HTTP to HTTPS\n' +
+                        '4. Access the site via https://bydcommander.win';
+                    console.error(errorMsg);
+                    showError(errorMsg);
+                    button.disabled = false;
+                    button.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Sign in with Google';
+                    return;
+                }
                 
                 const provider = new firebase.auth.GoogleAuthProvider();
                 
@@ -582,57 +598,123 @@
                 const redirectUrl = window.location.origin + window.location.pathname;
                 console.log('Redirect URL will be:', redirectUrl);
                 
-                // Test if we can reach Google OAuth directly
+                // Test if we can reach Google OAuth endpoints directly
                 console.log('Testing Google OAuth connectivity...');
-                try {
-                    const testUrl = 'https://accounts.google.com/.well-known/openid-configuration';
-                    const testResponse = await fetch(testUrl, { 
-                        method: 'HEAD', 
-                        mode: 'no-cors',
-                        cache: 'no-cache'
-                    });
-                    console.log('✓ Google OAuth domain is reachable');
-                } catch (testError) {
-                    console.warn('⚠ Google OAuth connectivity test failed (may be normal due to CORS):', testError);
+                const googleEndpoints = [
+                    'https://accounts.google.com/.well-known/openid-configuration',
+                    'https://identitytoolkit.googleapis.com/v1/projects',
+                    'https://securetoken.googleapis.com/v1/token',
+                    'https://oauth2.googleapis.com/token'
+                ];
+                
+                for (const endpoint of googleEndpoints) {
+                    try {
+                        console.log(`Testing: ${endpoint}`);
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 3000);
+                        
+                        const testResponse = await fetch(endpoint, { 
+                            method: 'HEAD', 
+                            mode: 'no-cors',
+                            cache: 'no-cache',
+                            signal: controller.signal
+                        });
+                        clearTimeout(timeoutId);
+                        console.log(`✓ ${endpoint} - reachable`);
+                    } catch (testError) {
+                        if (testError.name === 'AbortError') {
+                            console.warn(`⚠ ${endpoint} - TIMEOUT (may be blocked by browser)`);
+                        } else {
+                            console.warn(`⚠ ${endpoint} - failed (may be normal due to CORS):`, testError.message);
+                        }
+                    }
                 }
                 
-                showError('Redirecting to Google sign-in...');
+                // Check if requests are being blocked by monitoring network activity
+                console.log('=== Network Diagnostics ===');
+                console.log('Before calling signInWithRedirect, check:');
+                console.log('1. Open DevTools → Network tab');
+                console.log('2. Filter by "googleapis.com" or "google.com"');
+                console.log('3. Look for RED/BLOCKED requests');
+                console.log('4. Check browser console for CORS or network errors');
+                console.log('==========================');
                 
-                // Use redirect directly - it's more reliable for network issues
-                // Wrap in try-catch to see if the redirect call itself fails
+                // Try popup first (different code path, might work if redirect fails)
+                console.log('Attempting sign-in with popup method...');
+                showError('Opening Google sign-in popup...');
+                
                 try {
-                    console.log('Calling signInWithRedirect...');
-                    console.log('If this fails, check browser Network tab for blocked requests to:');
-                    console.log('- identitytoolkit.googleapis.com');
-                    console.log('- securetoken.googleapis.com');
-                    console.log('- accounts.google.com');
-                    console.log('- oauth2.googleapis.com');
-                    
-                    // Use a promise with timeout to detect if it hangs
-                    const redirectPromise = auth.signInWithRedirect(provider);
+                    const popupPromise = auth.signInWithPopup(provider);
                     const timeoutPromise = new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Redirect timeout - Firebase may be blocked')), 10000)
+                        setTimeout(() => reject(new Error('Popup sign-in timeout')), 30000)
                     );
                     
-                    await Promise.race([redirectPromise, timeoutPromise]);
-                    console.log('Redirect initiated successfully');
-                    return; // Will redirect, so we won't reach here
-                } catch (redirectError) {
-                    console.error('signInWithRedirect call failed:', redirectError);
-                    console.error('This usually means Firebase cannot reach Google OAuth servers');
-                    console.error('Possible causes:');
-                    console.error('1. Browser blocking third-party requests');
-                    console.error('2. Network connectivity issues');
-                    console.error('3. CORS configuration problems');
-                    console.error('4. Firebase SDK version compatibility');
-                    console.error('');
-                    console.error('ACTION REQUIRED:');
-                    console.error('1. Open browser DevTools → Network tab');
-                    console.error('2. Try signing in again');
-                    console.error('3. Look for failed/blocked requests (red entries)');
-                    console.error('4. Check if requests to *.googleapis.com are being made');
-                    console.error('5. Check browser console for CORS errors');
-                    throw redirectError; // Re-throw to be caught by outer catch
+                    const result = await Promise.race([popupPromise, timeoutPromise]);
+                    console.log('Popup sign-in successful!');
+                    currentUser = result.user;
+                    console.log('Signed in as:', currentUser.email);
+                    await loadDeviceConnection();
+                    return;
+                } catch (popupError) {
+                    console.warn('Popup sign-in failed, trying redirect method:', popupError);
+                    console.warn('Popup error code:', popupError.code);
+                    console.warn('Popup error message:', popupError.message);
+                    
+                    // If popup fails, try redirect
+                    if (popupError.code === 'auth/popup-blocked' || 
+                        popupError.code === 'auth/popup-closed-by-user') {
+                        console.log('Popup blocked/closed, using redirect method...');
+                        showError('Redirecting to Google sign-in...');
+                    } else {
+                        console.log('Popup failed with network error, trying redirect as fallback...');
+                        showError('Trying redirect method...');
+                    }
+                    
+                    // Try redirect as fallback
+                    try {
+                        console.log('Calling signInWithRedirect...');
+                        console.log('If this fails, check browser Network tab for blocked requests to:');
+                        console.log('- identitytoolkit.googleapis.com');
+                        console.log('- securetoken.googleapis.com');
+                        console.log('- accounts.google.com');
+                        console.log('- oauth2.googleapis.com');
+                        
+                        const redirectPromise = auth.signInWithRedirect(provider);
+                        const timeoutPromise = new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Redirect timeout')), 10000)
+                        );
+                        
+                        await Promise.race([redirectPromise, timeoutPromise]);
+                        console.log('Redirect initiated successfully');
+                        return; // Will redirect, so we won't reach here
+                    } catch (redirectError) {
+                        console.error('Both popup and redirect methods failed!');
+                        console.error('Redirect error:', redirectError);
+                        console.error('Error details:', {
+                            code: redirectError.code,
+                            message: redirectError.message
+                        });
+                        console.error('');
+                        console.error('=== DIAGNOSTIC STEPS ===');
+                        console.error('1. Browser Network Tab (MOST IMPORTANT):');
+                        console.error('   - Open DevTools (F12) → Network tab');
+                        console.error('   - Filter by: googleapis.com OR google.com');
+                        console.error('   - Click "Sign in" again and watch for requests');
+                        console.error('   - Look for RED/BLOCKED requests');
+                        console.error('   - Check status codes: 403=blocked, 429=rate limited, CORS=blocked');
+                        console.error('');
+                        console.error('2. Browser Extensions:');
+                        console.error('   - Disable ALL extensions (ad blockers, privacy tools)');
+                        console.error('   - Try incognito/private mode (extensions disabled)');
+                        console.error('   - Try different browser (Chrome, Firefox, Safari)');
+                        console.error('');
+                        console.error('3. Firebase Configuration:');
+                        console.error('   - Verify domain is authorized in Firebase Console');
+                        console.error('   - Check Firebase Console → Authentication → Settings');
+                        console.error('   - Ensure Google sign-in provider is enabled');
+                        console.error('===========================');
+                        throw redirectError; // Re-throw to be caught by outer catch
+                    }
                 }
                 
                 // OLD CODE - keeping for reference but not using
@@ -678,28 +760,42 @@
                 let errorMessage = 'Failed to sign in: ' + error.message;
                 
                 if (error.code === 'auth/network-request-failed') {
-                    errorMessage = `Network error: Firebase cannot reach Google OAuth servers.\n\n` +
-                        `Since Cloudflare proxy is disabled, this might be:\n` +
-                        `1. Browser blocking third-party requests\n` +
-                        `2. CORS issues\n` +
-                        `3. Firebase SDK connectivity problem\n\n` +
-                        `DIAGNOSTIC STEPS:\n` +
-                        `1. Open browser DevTools (F12) → Network tab\n` +
-                        `2. Click "Sign in with Google" again\n` +
-                        `3. Look for RED/BLOCKED requests to:\n` +
-                        `   - identitytoolkit.googleapis.com\n` +
-                        `   - securetoken.googleapis.com\n` +
-                        `   - accounts.google.com\n` +
-                        `   - oauth2.googleapis.com\n\n` +
-                        `4. Check Console tab for CORS errors\n` +
-                        `5. Try in a different browser (Chrome, Firefox, Safari)\n` +
-                        `6. Try in incognito/private mode\n\n` +
-                        `If requests are being made but failing, check:\n` +
-                        `- Browser extensions blocking requests\n` +
-                        `- Corporate firewall/proxy\n` +
-                        `- VPN interference\n\n` +
-                        `Current domain: ${window.location.hostname}\n` +
-                        `Protocol: ${window.location.protocol}`;
+                    // Check if it's an HTTP vs HTTPS issue
+                    if (window.location.protocol === 'http:') {
+                        errorMessage = `CRITICAL: Site is using HTTP, but Firebase requires HTTPS!\n\n` +
+                            `Firebase authentication will NOT work over HTTP.\n\n` +
+                            `FIX IN CLOUDFLARE:\n` +
+                            `1. Go to Cloudflare Dashboard → SSL/TLS\n` +
+                            `2. Set encryption mode to "Full" or "Full (strict)"\n` +
+                            `3. Go to SSL/TLS → Edge Certificates\n` +
+                            `4. Enable "Always Use HTTPS"\n` +
+                            `5. Access site via: https://bydcommander.win (not http://)\n\n` +
+                            `Current URL: ${window.location.href}\n` +
+                            `Required: https://${window.location.hostname}${window.location.pathname}`;
+                    } else {
+                        errorMessage = `Network error: Firebase cannot reach Google OAuth servers.\n\n` +
+                            `HTTPS is enabled, but the request is still failing.\n\n` +
+                            `IMMEDIATE STEPS:\n` +
+                            `1. Open DevTools (F12) → Network tab\n` +
+                            `2. Filter by: googleapis.com\n` +
+                            `3. Click "Sign in" again and watch for requests\n` +
+                            `4. Look for RED/BLOCKED requests\n` +
+                            `5. Check status codes:\n` +
+                            `   - 403 = blocked by browser/extension\n` +
+                            `   - CORS error = blocked by browser\n` +
+                            `   - No request = Firebase SDK issue\n\n` +
+                            `COMMON CAUSES:\n` +
+                            `- Browser extensions (ad blockers, privacy tools)\n` +
+                            `- Browser blocking third-party requests\n` +
+                            `- Firebase SDK making initial API call that fails\n\n` +
+                            `TRY THIS:\n` +
+                            `1. Disable ALL browser extensions\n` +
+                            `2. Try incognito/private mode\n` +
+                            `3. Try different browser\n` +
+                            `4. Check Network tab to see what's actually being blocked\n\n` +
+                            `Current domain: ${window.location.hostname}\n` +
+                            `Protocol: ${window.location.protocol}`;
+                    }
                 } else if (error.code === 'auth/unauthorized-domain') {
                     errorMessage = `Domain not authorized!\n\n` +
                         `Please add "${window.location.hostname}" to Firebase authorized domains:\n` +
