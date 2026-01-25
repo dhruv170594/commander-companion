@@ -653,6 +653,9 @@
                     console.log('Popup sign-in successful!');
                     currentUser = result.user;
                     console.log('Signed in as:', currentUser.email);
+                    
+                    // Keep login screen visible during device connection lookup
+                    // loadDeviceConnection will hide it when ready
                     await loadDeviceConnection();
                     return;
                 } catch (popupError) {
@@ -823,17 +826,26 @@
                 // User signed in via redirect
                 currentUser = result.user;
                 console.log('Signed in via redirect as:', currentUser.email);
+                // Keep login screen visible - loadDeviceConnection will hide it when ready
+                document.getElementById('loginScreen').style.display = 'flex';
+                document.getElementById('content').style.display = 'none';
                 loadDeviceConnection();
             } else if (result.credential) {
                 // Fallback for older Firebase versions
                 currentUser = result.user;
                 console.log('Signed in via redirect (credential) as:', currentUser?.email);
                 if (currentUser) {
+                    // Keep login screen visible - loadDeviceConnection will hide it when ready
+                    document.getElementById('loginScreen').style.display = 'flex';
+                    document.getElementById('content').style.display = 'none';
                     loadDeviceConnection();
                 }
             }
         }).catch((error) => {
             console.error('Redirect sign-in error:', error);
+            // Keep login screen visible on error
+            document.getElementById('loginScreen').style.display = 'flex';
+            document.getElementById('content').style.display = 'none';
             if (error.code !== 'auth/popup-closed-by-user') {
                 showError('Redirect sign-in failed: ' + error.message);
             }
@@ -843,10 +855,16 @@
         async function loadDeviceConnection() {
             if (!currentUser) {
                 showError('Please sign in first');
+                // Keep login screen visible
+                document.getElementById('loginScreen').style.display = 'flex';
+                document.getElementById('content').style.display = 'none';
                 return;
             }
             
             try {
+                // Keep login screen visible and show loading during lookup
+                document.getElementById('loginScreen').style.display = 'flex';
+                document.getElementById('content').style.display = 'none';
                 document.getElementById('loading').style.display = 'block';
                 showError('Looking up your car...');
                 
@@ -870,7 +888,7 @@
                     }
                 }
                 
-                // Hide login screen and show UI
+                // NOW hide login screen and show UI (only after we've checked authentication and device connection)
                 document.getElementById('loginScreen').style.display = 'none';
                 document.getElementById('content').style.display = 'block';
                 document.getElementById('signOutButton').style.display = 'block';
@@ -926,24 +944,33 @@
             } catch (error) {
                 console.error('Error loading device connection:', error);
                 
-                // Even on error, show UI if user is signed in
-                document.getElementById('loginScreen').style.display = 'none';
-                document.getElementById('content').style.display = 'block';
-                document.getElementById('signOutButton').style.display = 'block';
-                
-                // Show red bar (car is off/error)
-                const connectionBar = document.getElementById('connectionBar');
-                if (connectionBar) {
-                    connectionBar.className = 'connection-bar'; // Red
-                }
-                
-                document.getElementById('loading').style.display = 'none';
-                
-                // Check if it's an offline error
-                if (error.code === 'unavailable' || error.message.includes('offline')) {
-                    showError('Car is off or unreachable. The interface is available but controls are disabled.');
+                // Only show UI if user is actually authenticated
+                if (currentUser && auth.currentUser) {
+                    // User is authenticated, show UI even on error
+                    document.getElementById('loginScreen').style.display = 'none';
+                    document.getElementById('content').style.display = 'block';
+                    document.getElementById('signOutButton').style.display = 'block';
+                    
+                    // Show red bar (car is off/error)
+                    const connectionBar = document.getElementById('connectionBar');
+                    if (connectionBar) {
+                        connectionBar.className = 'connection-bar'; // Red
+                    }
+                    
+                    document.getElementById('loading').style.display = 'none';
+                    
+                    // Check if it's an offline error
+                    if (error.code === 'unavailable' || error.message.includes('offline')) {
+                        showError('Car is off or unreachable. The interface is available but controls are disabled.');
+                    } else {
+                        showError('Failed to load car connection: ' + error.message);
+                    }
                 } else {
-                    showError('Failed to load car connection: ' + error.message);
+                    // User not authenticated, keep login screen
+                    document.getElementById('loginScreen').style.display = 'flex';
+                    document.getElementById('content').style.display = 'none';
+                    document.getElementById('loading').style.display = 'none';
+                    showError('Authentication failed. Please try signing in again.');
                 }
             }
         }
@@ -1299,6 +1326,8 @@
                     document.getElementById('userInfo').textContent = `Signed in as: ${user.email}`;
                     document.getElementById('userInfo').style.display = 'block';
                     document.getElementById('signOutButton').style.display = 'block';
+                    // Keep login screen visible during device connection lookup
+                    // loadDeviceConnection will hide it when ready
                     await loadDeviceConnection();
                 } else {
                     // Show login screen
