@@ -461,9 +461,45 @@
             console.log('1. Domain authorized:', window.location.hostname);
             console.log('2. Google sign-in provider enabled');
             console.log('=====================================');
+            
+            // Test network connectivity to Firebase
+            testFirebaseNetwork();
         } catch (initError) {
             console.error('Firebase initialization failed:', initError);
             showError('Failed to initialize Firebase. Please check your configuration.');
+        }
+        
+        // Test Firebase network connectivity
+        async function testFirebaseNetwork() {
+            try {
+                console.log('Testing Firebase network connectivity...');
+                // Test if we can reach Firebase auth domain
+                const testUrl = `https://${firebaseConfig.authDomain}`;
+                console.log('Testing URL:', testUrl);
+                
+                // Try a simple fetch to see if domain is reachable
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                
+                try {
+                    const response = await fetch(testUrl, {
+                        method: 'HEAD',
+                        mode: 'no-cors',
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeoutId);
+                    console.log('✓ Firebase domain is reachable');
+                } catch (fetchError) {
+                    clearTimeout(timeoutId);
+                    if (fetchError.name === 'AbortError') {
+                        console.warn('⚠ Firebase domain test timed out (may be normal due to CORS)');
+                    } else {
+                        console.warn('⚠ Firebase domain test failed (may be normal due to CORS):', fetchError.message);
+                    }
+                }
+            } catch (error) {
+                console.warn('Firebase network test error:', error);
+            }
         }
         
         // Use relative paths - they work from the same origin
@@ -536,11 +572,31 @@
                 
                 // Use redirect directly - it's more reliable for network issues
                 console.log('Initiating redirect sign-in...');
+                console.log('Provider:', provider);
+                console.log('Auth object:', auth);
+                
+                // Test if we can reach Firebase first
+                try {
+                    console.log('Testing Firebase auth connectivity...');
+                    // This is a lightweight check
+                    const testAuth = firebase.auth();
+                    console.log('Auth object created successfully');
+                } catch (testError) {
+                    console.error('Auth test failed:', testError);
+                }
+                
                 showError('Redirecting to Google sign-in...');
                 
                 // Use redirect directly - it's more reliable for network issues
-                await auth.signInWithRedirect(provider);
-                return; // Will redirect, so we won't reach here
+                // Wrap in try-catch to see if the redirect call itself fails
+                try {
+                    await auth.signInWithRedirect(provider);
+                    console.log('Redirect initiated successfully');
+                    return; // Will redirect, so we won't reach here
+                } catch (redirectError) {
+                    console.error('signInWithRedirect call failed:', redirectError);
+                    throw redirectError; // Re-throw to be caught by outer catch
+                }
                 
                 // OLD CODE - keeping for reference but not using
                 /*
@@ -586,13 +642,16 @@
                 
                 if (error.code === 'auth/network-request-failed') {
                     errorMessage = `Network error: Firebase authentication servers are not reachable.\n\n` +
-                        `Please verify:\n` +
-                        `1. Domain "${window.location.hostname}" is added to Firebase authorized domains\n` +
-                        `   (Firebase Console → Authentication → Settings → Authorized domains)\n` +
-                        `2. Google sign-in provider is enabled\n` +
-                        `   (Firebase Console → Authentication → Sign-in method)\n` +
-                        `3. Your internet connection is working\n` +
-                        `4. No firewall/proxy is blocking Firebase services\n\n` +
+                        `This could be due to:\n` +
+                        `1. Cloudflare blocking Firebase requests (check Cloudflare firewall rules)\n` +
+                        `2. CORS issues (check browser Network tab for blocked requests)\n` +
+                        `3. Network connectivity issues\n` +
+                        `4. Firebase services temporarily unavailable\n\n` +
+                        `Troubleshooting:\n` +
+                        `- Open browser DevTools → Network tab\n` +
+                        `- Try signing in again\n` +
+                        `- Look for failed requests to *.firebaseapp.com or *.googleapis.com\n` +
+                        `- Check if requests are being blocked by Cloudflare\n\n` +
                         `Current domain: ${window.location.hostname}\n` +
                         `Firebase auth domain: ${firebaseConfig.authDomain}`;
                 } else if (error.code === 'auth/unauthorized-domain') {
