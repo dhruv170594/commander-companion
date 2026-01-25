@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1F8AFF">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Commander Companion">
+    <title>Commander Companion</title>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html {
+            background: #111b23;
+            overscroll-behavior: none;
+            -webkit-overflow-scrolling: touch;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #111b23;
+            color: #F1F3F6;
+            padding: 16px;
+            padding-top: 20px;
+            padding-bottom: 80px;
+            overflow-x: hidden;
+            overscroll-behavior: none;
+            min-height: 100vh;
+        }
+        .connection-bar {
+            width: 100%;
+            height: 6px;
+            background: #f44336;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1000;
+            transition: background 0.3s;
+        }
+        .connection-bar.connected {
+            background: #36C36A;
+        }
+        .map-container {
+            width: 100%;
+            aspect-ratio: 1;
+            margin-bottom: 16px;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #18273c;
+            position: relative;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        .map-center-button {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            z-index: 1000;
+            background: #111b23;
+            color: white;
+            border: none;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            font-size: 20px;
+            transition: background 0.2s;
+            padding: 0;
+            overflow: hidden;
+        }
+        .map-center-button img {
+            width: 28px;
+            height: 28px;
+            object-fit: contain;
+            filter: brightness(0) invert(1);
+            mix-blend-mode: normal;
+        }
+        .map-center-button:active {
+            background: #0d1419;
+        }
+        .map-center-button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .map-center-button:disabled img {
+            opacity: 0.5;
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .status-card {
+            background: #18273c;
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+        .status-label {
+            font-size: 12px;
+            color: #9AA3AF;
+            margin-bottom: 8px;
+        }
+        .status-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1F8AFF;
+        }
+        .control-section {
+            background: #18273c;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 16px;
+            color: #F1F3F6;
+        }
+        .window-control {
+            margin-bottom: 16px;
+        }
+        .window-label {
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: #F1F3F6;
+        }
+        .slider {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: #2F3540;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #1F8AFF;
+            cursor: pointer;
+        }
+        .slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #1F8AFF;
+            cursor: pointer;
+            border: none;
+        }
+        .button-group {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+        }
+        button {
+            background: #1F8AFF;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:active {
+            background: #1a6fd9;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .loading {
+            text-align: center;
+            color: #9AA3AF;
+            padding: 20px;
+        }
+        .error {
+            background: #c62828;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        .segmented-control {
+            display: flex;
+            width: 100%;
+            height: 48px;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 16px;
+        }
+        .segmented-control button {
+            border: none;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .segmented-control button:active {
+            opacity: 0.7;
+        }
+        .segmented-control .decrement-btn {
+            background: #1F8AFF;
+            color: white;
+            flex: 0 0 60px;
+            border-radius: 8px 0 0 8px;
+        }
+        .segmented-control .value-display {
+            background: white;
+            color: #1F8AFF;
+            flex: 1;
+            font-size: 18px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-left: none;
+            border-right: none;
+        }
+        .segmented-control .increment-btn {
+            background: #0d5aa7;
+            color: white;
+            flex: 0 0 60px;
+            border-radius: 0 8px 8px 0;
+        }
+        .segmented-control-label {
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: #F1F3F6;
+        }
+    </style>
+</head>
+<body>
+    <div id="connectionBar" class="connection-bar"></div>
+    
+    <div id="errorMessage" class="error" style="display: none;"></div>
+    
+    <div id="loading" class="loading">Loading car data...</div>
+    
+    <div id="content" style="display: none;">
+        <!-- Map -->
+        <div class="map-container">
+            <div id="map"></div>
+            <button class="map-center-button" id="centerCarButton" onclick="centerOnCar()" title="Center on car location" disabled>
+                <img src="/car-location-icon.png" alt="Car location" />
+            </button>
+        </div>
+        <!-- Status Cards -->
+        <div class="status-grid">
+            <div class="status-card">
+                <div class="status-label">Speed</div>
+                <div class="status-value" id="speedValue">--</div>
+            </div>
+            <div class="status-card">
+                <div class="status-label">Battery</div>
+                <div class="status-value" id="socValue">--%</div>
+            </div>
+            <div class="status-card">
+                <div class="status-label">EV Range</div>
+                <div class="status-value" id="evRangeValue">-- km</div>
+            </div>
+            <div class="status-card">
+                <div class="status-label">Total Mileage</div>
+                <div class="status-value" id="totalMileageValue">-- km</div>
+            </div>
+        </div>
+        
+        <!-- Window Controls -->
+        <div class="control-section">
+            <div class="section-title">Windows</div>
+            <div class="window-control">
+                <div class="window-label">Left Front: <span id="windowLFValue">0</span>%</div>
+                <input type="range" class="slider" id="windowLF" min="0" max="100" value="0">
+            </div>
+            <div class="window-control">
+                <div class="window-label">Right Front: <span id="windowRFValue">0</span>%</div>
+                <input type="range" class="slider" id="windowRF" min="0" max="100" value="0">
+            </div>
+            <div class="window-control">
+                <div class="window-label">Left Rear: <span id="windowLRValue">0</span>%</div>
+                <input type="range" class="slider" id="windowLR" min="0" max="100" value="0">
+            </div>
+            <div class="window-control">
+                <div class="window-label">Right Rear: <span id="windowRRValue">0</span>%</div>
+                <input type="range" class="slider" id="windowRR" min="0" max="100" value="0">
+            </div>
+        </div>
+        
+        <!-- Quick Controls -->
+        <div class="control-section">
+            <div class="section-title">Quick Controls</div>
+            <div class="button-group">
+                <button onclick="sendCommand('setTrunkState', {state: 'open'})">Open Trunk</button>
+                <button onclick="sendCommand('setTrunkState', {state: 'close'})">Close Trunk</button>
+                <button onclick="sendCommand('setReadingLight', {enabled: true})">Reading Light On</button>
+                <button onclick="sendCommand('setReadingLight', {enabled: false})">Reading Light Off</button>
+            </div>
+        </div>
+        
+        <!-- AC Control -->
+        <div class="control-section">
+            <div class="section-title">AC Control</div>
+            <div class="segmented-control-label">Temperature</div>
+            <div class="segmented-control">
+                <button class="decrement-btn" onclick="adjustAcTemp(-1)">−</button>
+                <div class="value-display" id="acTempValue">22°C</div>
+                <button class="increment-btn" onclick="adjustAcTemp(1)">+</button>
+            </div>
+            <div class="segmented-control-label">Wind Speed</div>
+            <div class="segmented-control">
+                <button class="decrement-btn" onclick="adjustAcFan(-1)">−</button>
+                <div class="value-display" id="acFanValue">4</div>
+                <button class="increment-btn" onclick="adjustAcFan(1)">+</button>
+            </div>
+        </div>
+        
+        <!-- Media Volume -->
+        <div class="control-section">
+            <div class="section-title">Media Volume</div>
+            <div class="segmented-control-label">Volume</div>
+            <div class="segmented-control">
+                <button class="decrement-btn" onclick="adjustVolume(-1)">−</button>
+                <div class="value-display" id="volumeValue">20</div>
+                <button class="increment-btn" onclick="adjustVolume(1)">+</button>
+            </div>
+        </div>
+        
+        <!-- Seat Memory -->
+        <div class="control-section">
+            <div class="section-title">Seat Memory</div>
+            <div class="button-group">
+                <button onclick="sendCommand('setSeatMemory', {position: 1})">Position 1</button>
+                <button onclick="sendCommand('setSeatMemory', {position: 2})">Position 2</button>
+                <button onclick="sendCommand('setSeatMemory', {position: 3})">Position 3</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Use relative paths - they work from the same origin
+        const API_BASE = '';
+        let updateInterval = null;
+        let map = null;
+        let carMarker = null;
+        
+        // WebRTC P2P Connection
+        let signalingSocket = null;
+        let peerConnection = null;
+        let dataChannel = null;
+        let useP2P = false;
+        let pendingRequests = new Map();
+        let requestIdCounter = 0;
+        
+        // STUN/TURN servers for NAT traversal - Metered.ca configuration
+        const rtcConfig = {
+            iceServers: [
+                {
+                    urls: "stun:stun.relay.metered.ca:80",
+                },
+                {
+                    urls: "turn:global.relay.metered.ca:80",
+                    username: "59300173e16020ec8eb46bc6",
+                    credential: "JkXmsWLaInmBZ3YB",
+                },
+                {
+                    urls: "turn:global.relay.metered.ca:80?transport=tcp",
+                    username: "59300173e16020ec8eb46bc6",
+                    credential: "JkXmsWLaInmBZ3YB",
+                },
+                {
+                    urls: "turn:global.relay.metered.ca:443",
+                    username: "59300173e16020ec8eb46bc6",
+                    credential: "JkXmsWLaInmBZ3YB",
+                },
+                {
+                    urls: "turns:global.relay.metered.ca:443?transport=tcp",
+                    username: "59300173e16020ec8eb46bc6",
+                    credential: "JkXmsWLaInmBZ3YB",
+                },
+            ],
+        };
+        
+        // Initialize WebRTC P2P connection
+        async function initP2P() {
+            try {
+                // Get signaling URL
+                // Use custom User-Agent to bypass localtunnel reminder page
+                const response = await fetch('/api/p2p/info', {
+                    headers: {
+                        'User-Agent': 'CommanderCompanion/1.0 (WebRTC Client)',
+                        'bypass-tunnel-reminder': 'true'
+                    }
+                });
+                const info = await response.json();
+                
+                if (!info.p2pEnabled) {
+                    console.log('P2P not enabled');
+                    showError('P2P not enabled on server');
+                    return;
+                }
+                
+                // Connect to signaling WebSocket
+                // Use window.location.host to support remote access (works with tunnels/public IPs)
+                // This allows the signaling to work even when devices are on different networks
+                const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsHost = window.location.host;
+                // Use the current page's host instead of server-provided IP for remote access
+                const signalingUrl = wsProtocol + '//' + wsHost + '/ws/signal';
+                
+                console.log('Connecting to signaling server:', signalingUrl);
+                // Note: WebSocket doesn't support custom headers in browser
+                // But we can try to connect - the server should accept it
+                signalingSocket = new WebSocket(signalingUrl);
+                
+                signalingSocket.onopen = () => {
+                    console.log('Signaling WebSocket connected');
+                    createPeerConnection();
+                };
+                
+                signalingSocket.onmessage = async (event) => {
+                    const message = JSON.parse(event.data);
+                    await handleSignalingMessage(message);
+                };
+                
+                signalingSocket.onerror = (error) => {
+                    console.error('Signaling WebSocket error:', error);
+                    updateConnectionStatus(false);
+                    showError('P2P connection failed. Please check your connection.');
+                };
+                
+                signalingSocket.onclose = () => {
+                    console.log('Signaling WebSocket closed');
+                    updateConnectionStatus(false);
+                    // Try to reconnect
+                    setTimeout(() => {
+                        if (!useP2P) {
+                            initP2P();
+                        }
+                    }, 3000);
+                };
+            } catch (error) {
+                console.error('Failed to initialize P2P:', error);
+                updateConnectionStatus(false);
+                showError('Failed to initialize P2P connection: ' + error.message);
+            }
+        }
+        
+        function createPeerConnection() {
+            peerConnection = new RTCPeerConnection(rtcConfig);
+            
+            // Handle ICE candidates
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate && signalingSocket && signalingSocket.readyState === WebSocket.OPEN) {
+                    signalingSocket.send(JSON.stringify({
+                        type: 'ice-candidate',
+                        candidate: event.candidate
+                    }));
+                }
+            };
+            
+            // Handle connection state changes
+            peerConnection.onconnectionstatechange = () => {
+                console.log('Peer connection state:', peerConnection.connectionState);
+                if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
+                    updateConnectionStatus(false);
+                    setTimeout(() => {
+                        if (!useP2P) {
+                            initP2P();
+                        }
+                    }, 3000);
+                } else if (peerConnection.connectionState === 'connected') {
+                    updateConnectionStatus(true);
+                }
+            };
+            
+            // Handle data channel
+            peerConnection.ondatachannel = (event) => {
+                const channel = event.channel;
+                setupDataChannel(channel);
+            };
+            
+            // Create data channel for sending requests
+            dataChannel = peerConnection.createDataChannel('http-tunnel', {
+                ordered: true
+            });
+            setupDataChannel(dataChannel);
+            
+            // Create offer
+            peerConnection.createOffer()
+                .then(offer => peerConnection.setLocalDescription(offer))
+                .then(() => {
+                    if (signalingSocket && signalingSocket.readyState === WebSocket.OPEN) {
+                        signalingSocket.send(JSON.stringify({
+                            type: 'offer',
+                            sdp: peerConnection.localDescription
+                        }));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error creating offer:', error);
+                    updateConnectionStatus(false);
+                    showError('Failed to create P2P offer: ' + error.message);
+                });
+        }
+        
+        function setupDataChannel(channel) {
+            channel.onopen = () => {
+                console.log('P2P data channel opened');
+                useP2P = true;
+                updateConnectionStatus(true);
+                hideError();
+                // Now that P2P is connected, load car data
+                loadCarStatus();
+                // Start auto-refresh only after P2P is connected
+                if (updateInterval) {
+                    clearInterval(updateInterval);
+                }
+                updateInterval = setInterval(loadCarStatus, 3000);
+            };
+            
+            channel.onmessage = (event) => {
+                try {
+                    const response = JSON.parse(event.data);
+                    const request = pendingRequests.get(response.id);
+                    if (request) {
+                        pendingRequests.delete(response.id);
+                        request.resolve(response);
+                    }
+                } catch (error) {
+                    console.error('Error parsing data channel message:', error);
+                }
+            };
+            
+            channel.onerror = (error) => {
+                console.error('Data channel error:', error);
+                useP2P = false;
+                updateConnectionStatus(false);
+                showError('P2P data channel error');
+            };
+            
+            channel.onclose = () => {
+                console.log('P2P data channel closed');
+                useP2P = false;
+                updateConnectionStatus(false);
+                showError('P2P connection lost. Reconnecting...');
+                setTimeout(() => {
+                    if (!useP2P) {
+                        initP2P();
+                    }
+                }, 3000);
+            };
+        }
+        
+        async function handleSignalingMessage(message) {
+            if (!peerConnection) return;
+            
+            try {
+                switch (message.type) {
+                    case 'answer':
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription(message.sdp));
+                        break;
+                    case 'ice-candidate':
+                        if (message.candidate) {
+                            await peerConnection.addIceCandidate(new RTCIceCandidate(message.candidate));
+                        }
+                        break;
+                    default:
+                        console.warn('Unknown signaling message type:', message.type);
+                }
+            } catch (error) {
+                console.error('Error handling signaling message:', error);
+            }
+        }
+        
+        
+        function updateConnectionStatus(connected) {
+            const bar = document.getElementById('connectionBar');
+            if (bar) {
+                bar.className = 'connection-bar' + (connected ? ' connected' : '');
+            }
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            if (errorDiv) {
+                errorDiv.textContent = message;
+                errorDiv.style.display = 'block';
+            }
+        }
+        
+        function hideError() {
+            const errorDiv = document.getElementById('errorMessage');
+            if (errorDiv) {
+                errorDiv.style.display = 'none';
+            }
+        }
+        
+        // Override fetch to use P2P WebRTC data channel - no fallback
+        const originalFetch = window.fetch;
+        window.fetch = async function(url, options = {}) {
+            // Allow these endpoints to use original fetch (needed for initial connection setup)
+            // Use relative URLs so they work with any host (local or remote)
+            if (typeof url === 'string' && (url.includes('/api/p2p/info') || url.startsWith('/api/p2p/info'))) {
+                // Ensure we use the current page's origin for the initial connection
+                const fullUrl = url.startsWith('/') ? window.location.origin + url : url;
+                // Set custom headers to bypass localtunnel reminder page
+                const fetchOptions = {
+                    ...options,
+                    headers: {
+                        ...(options.headers || {}),
+                        'User-Agent': 'CommanderCompanion/1.0 (WebRTC Client)',
+                        'bypass-tunnel-reminder': 'true'
+                    }
+                };
+                return originalFetch(fullUrl, fetchOptions);
+            }
+            
+            // Only allow requests if P2P data channel is connected
+            if (!useP2P || !dataChannel || dataChannel.readyState !== 'open') {
+                return Promise.reject(new Error('P2P connection not established. Please wait for connection.'));
+            }
+            
+            // Tunnel through P2P data channel
+            const requestId = requestIdCounter++;
+            const request = {
+                id: requestId,
+                url: url,
+                method: options.method || 'GET',
+                headers: options.headers || {},
+                body: options.body || null
+            };
+            
+            return new Promise((resolve, reject) => {
+                pendingRequests.set(requestId, { resolve, reject });
+                
+                try {
+                    dataChannel.send(JSON.stringify(request));
+                } catch (error) {
+                    pendingRequests.delete(requestId);
+                    reject(new Error('Failed to send P2P request: ' + error.message));
+                    return;
+                }
+                
+                // Timeout after 10 seconds
+                setTimeout(() => {
+                    if (pendingRequests.has(requestId)) {
+                        pendingRequests.delete(requestId);
+                        reject(new Error('P2P request timeout'));
+                    }
+                }, 10000);
+            }).then(response => {
+                // Convert response to Fetch Response object
+                if (response.body) {
+                    return new Response(JSON.stringify(response.body), {
+                        status: response.status || 200,
+                        statusText: response.statusText || 'OK',
+                        headers: response.headers || {}
+                    });
+                } else {
+                    return new Response(response.text || '', {
+                        status: response.status || 200,
+                        statusText: response.statusText || 'OK',
+                        headers: response.headers || {}
+                    });
+                }
+            }).catch(error => {
+                console.error('P2P request failed:', error);
+                throw error;
+            });
+        };
+        
+        window.addEventListener('load', () => {
+            // Show loading message
+            showError('Establishing P2P connection...');
+            // Don't load any data until P2P is connected
+            initP2P();
+            // Initialize map (doesn't require P2P)
+            initMap();
+        });
+        
+        // Initialize map
+        function initMap() {
+            map = L.map('map', {
+                zoomControl: false, // Disable default zoom controls
+                attributionControl: false
+            }).setView([0, 0], 3);
+            
+            // Use OpenStreetMap standard tiles (light mode)
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(map);
+        }
+        
+        // Center map on car location
+        function centerOnCar() {
+            if (map && carMarker) {
+                const location = carMarker.getLatLng();
+                map.setView(location, 16, {animate: true});
+            }
+        }
+        
+        // Update map with car location (without auto-centering)
+        function updateMapLocation(lat, lon) {
+            if (!map) return;
+            
+            if (lat != null && lon != null && lat !== 0 && lon !== 0) {
+                const location = [lat, lon];
+                
+                if (carMarker) {
+                    // Only update marker position, don't move the map
+                    carMarker.setLatLng(location);
+                } else {
+                    // Create marker with car icon
+                    const carIcon = L.divIcon({
+                        className: 'car-marker',
+                        html: '<div style="background: #1F8AFF; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
+                        iconSize: [20, 20],
+                        iconAnchor: [10, 10]
+                    });
+                    
+                    carMarker = L.marker(location, {icon: carIcon}).addTo(map);
+                    // Only center on first load, not on subsequent updates
+                    map.setView(location, 16);
+                }
+            }
+        }
+        
+        // Map initialization (doesn't require P2P)
+        // Note: loadCarStatus is called automatically when P2P connects
+        
+        // Also invalidate size when content becomes visible
+        const observer = new MutationObserver(() => {
+            if (map && document.getElementById('content').style.display !== 'none') {
+                setTimeout(() => {
+                    map.invalidateSize();
+                }, 50);
+            }
+        });
+        
+        observer.observe(document.getElementById('content'), {
+            attributes: true,
+            attributeFilter: ['style']
+        });
+        
+        // Window sliders
+        ['LF', 'RF', 'LR', 'RR'].forEach(win => {
+            const slider = document.getElementById('window' + win);
+            const valueSpan = document.getElementById('window' + win + 'Value');
+            let timeout = null;
+            
+            slider.addEventListener('input', (e) => {
+                valueSpan.textContent = e.target.value;
+                clearTimeout(timeout);
+                timeout = setTimeout(() => {
+                    sendCommand('setWindowToPercentage', {
+                        area: win === 'LF' ? 1 : win === 'RF' ? 2 : win === 'LR' ? 3 : 4,
+                        percent: parseInt(e.target.value)
+                    });
+                }, 500); // Debounce 500ms
+            });
+        });
+        
+        // AC Temperature segmented control
+        let currentAcTemp = 22;
+        function adjustAcTemp(delta) {
+            currentAcTemp = Math.max(16, Math.min(30, currentAcTemp + delta));
+            document.getElementById('acTempValue').textContent = currentAcTemp + '°C';
+            sendCommand('setAcTemperature', {
+                temperature: currentAcTemp,
+                zone: 0
+            });
+        }
+        
+        // AC Fan Level segmented control
+        let currentAcFan = 4;
+        function adjustAcFan(delta) {
+            currentAcFan = Math.max(1, Math.min(7, currentAcFan + delta));
+            document.getElementById('acFanValue').textContent = currentAcFan;
+            sendCommand('setAcFanLevel', {
+                level: currentAcFan
+            });
+        }
+        
+        // Volume segmented control
+        let currentVolume = 20;
+        function adjustVolume(delta) {
+            currentVolume = Math.max(0, Math.min(39, currentVolume + delta));
+            document.getElementById('volumeValue').textContent = currentVolume;
+            sendCommand('setMediaVolume', {
+                level: currentVolume
+            });
+        }
+        
+        async function loadCarStatus() {
+            try {
+                const response = await fetch(API_BASE + '/api/car/status', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+                }
+                
+                const data = await response.json();
+                
+                // Update status
+                document.getElementById('speedValue').textContent = 
+                    (data.speed != null ? data.speed.toFixed(1) : '--') + ' km/h';
+                document.getElementById('socValue').textContent = 
+                    (data.soc != null ? data.soc : '--') + '%';
+                document.getElementById('evRangeValue').textContent = 
+                    (data.evRange != null ? data.evRange : '--') + ' km';
+                document.getElementById('totalMileageValue').textContent = 
+                    (data.mileage?.total != null ? data.mileage.total : '--') + ' km';
+                
+                // Update windows
+                if (data.windows) {
+                    document.getElementById('windowLF').value = data.windows.lf || 0;
+                    document.getElementById('windowLFValue').textContent = data.windows.lf || 0;
+                    document.getElementById('windowRF').value = data.windows.rf || 0;
+                    document.getElementById('windowRFValue').textContent = data.windows.rf || 0;
+                    document.getElementById('windowLR').value = data.windows.lr || 0;
+                    document.getElementById('windowLRValue').textContent = data.windows.lr || 0;
+                    document.getElementById('windowRR').value = data.windows.rr || 0;
+                    document.getElementById('windowRRValue').textContent = data.windows.rr || 0;
+                }
+                
+                // Update AC
+                if (data.ac) {
+                    currentAcTemp = data.ac.temp || 22;
+                    document.getElementById('acTempValue').textContent = currentAcTemp + '°C';
+                    
+                    if (data.ac.fan != null) {
+                        currentAcFan = data.ac.fan;
+                        document.getElementById('acFanValue').textContent = currentAcFan;
+                    }
+                }
+                
+                // Update volume
+                if (data.mediaVolume != null) {
+                    currentVolume = data.mediaVolume;
+                    document.getElementById('volumeValue').textContent = currentVolume;
+                }
+                
+                // Update map location
+                if (data.location && data.location.lat != null && data.location.lng != null) {
+                    updateMapLocation(data.location.lat, data.location.lng);
+                    // Enable center button when location is available
+                    document.getElementById('centerCarButton').disabled = false;
+                } else {
+                    document.getElementById('centerCarButton').disabled = true;
+                }
+                
+                // Update connection bar to green
+                document.getElementById('connectionBar').classList.add('connected');
+                document.getElementById('errorMessage').style.display = 'none';
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+                
+                // Invalidate map size when content becomes visible
+                if (map) {
+                    setTimeout(() => {
+                        map.invalidateSize();
+                    }, 100);
+                }
+                
+            } catch (error) {
+                console.error('Error loading status:', error);
+                // Update connection bar to red (no error message shown)
+                document.getElementById('connectionBar').classList.remove('connected');
+                document.getElementById('errorMessage').style.display = 'none';
+                document.getElementById('loading').style.display = 'none';
+                // Still show content even if API fails, so user can see the interface
+                document.getElementById('content').style.display = 'block';
+                document.getElementById('centerCarButton').disabled = true;
+            }
+        }
+        
+        async function sendCommand(command, params) {
+            try {
+                const response = await fetch(API_BASE + '/api/car/command', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({command, params})
+                });
+                
+                const result = await response.json();
+                if (!result.success) {
+                    alert('Command failed: ' + (result.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error sending command:', error);
+                alert('Failed to send command: ' + error.message);
+            }
+        }
+        
+        // Initial load
+        // loadCarStatus() is called automatically when P2P connects
+        // Auto-refresh is started in setupDataChannel when P2P opens
+        
+        // PWA install prompt
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+        });
+    </script>
+</body>
+</html>
