@@ -740,30 +740,39 @@
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
                 
-                console.log('Sending offer to signaling server...');
+                const offerUrl = `${SIGNALING_SERVER}/signaling/${connectionInfo.userId}/offer`;
+                console.log('Sending offer to:', offerUrl);
+                console.log('UserId:', connectionInfo.userId);
+                console.log('DeviceToken:', connectionInfo.deviceToken);
                 
                 // Send offer via Cloudflare signaling
-                const offerResponse = await fetch(`${SIGNALING_SERVER}/signaling/${connectionInfo.userId}/offer`, {
+                const offerBody = {
+                    offer: {
+                        type: offer.type,
+                        sdp: offer.sdp
+                    },
+                    deviceToken: connectionInfo.deviceToken,
+                    deviceName: getDeviceName()
+                };
+                
+                const offerResponse = await fetch(offerUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'X-Device-Token': connectionInfo.deviceToken
                     },
-                    body: JSON.stringify({
-                        offer: {
-                            type: offer.type,
-                            sdp: offer.sdp
-                        },
-                        deviceToken: connectionInfo.deviceToken,
-                        deviceName: getDeviceName()
-                    })
+                    body: JSON.stringify(offerBody)
                 });
                 
+                console.log('Offer response status:', offerResponse.status);
+                const offerResult = await offerResponse.text();
+                console.log('Offer response:', offerResult);
+                
                 if (!offerResponse.ok) {
-                    throw new Error('Failed to send offer');
+                    throw new Error('Failed to send offer: ' + offerResult);
                 }
                 
-                console.log('Offer sent, polling for answer...');
+                console.log('Offer sent successfully! Now waiting for car to respond...');
                 
                 // Show app screen while waiting for connection
                 showAppScreen();
@@ -880,34 +889,53 @@
             }
             
             let pollCount = 0;
-            const maxPolls = 60; // 60 seconds timeout
+            const maxPolls = 90; // 90 seconds timeout (longer for car startup)
+            let receivedAnswer = false;
+            
+            // Update status to show we're waiting
+            document.getElementById('deviceStatus').textContent = 'Waiting for car...';
             
             signalingPollInterval = setInterval(async () => {
                 pollCount++;
                 
+                // Update status with countdown
+                if (!receivedAnswer) {
+                    const remaining = maxPolls - pollCount;
+                    document.getElementById('deviceStatus').textContent = `Waiting for car... (${remaining}s)`;
+                }
+                
                 if (pollCount > maxPolls) {
-                    console.error('Signaling timeout');
+                    console.error('Signaling timeout - car did not respond');
                     stopSignalingPoll();
-                    showError('Connection timeout. Car may be offline.');
+                    showError('Connection timeout. Make sure the car is on and Commander app is running with web control enabled.');
                     document.getElementById('deviceStatus').textContent = 'Car offline';
                     return;
                 }
                 
                 try {
                     // Poll for answer
-                    const answerResponse = await fetch(`${SIGNALING_SERVER}/signaling/${connectionInfo.userId}/answer`, {
+                    const answerUrl = `${SIGNALING_SERVER}/signaling/${connectionInfo.userId}/answer`;
+                    console.log(`Poll ${pollCount}: Checking for answer at ${answerUrl}`);
+                    
+                    const answerResponse = await fetch(answerUrl, {
                         headers: {
                             'X-Device-Token': connectionInfo.deviceToken
                         }
                     });
                     
+                    console.log(`Answer response status: ${answerResponse.status}`);
+                    
                     if (answerResponse.ok) {
                         const data = await answerResponse.json();
+                        console.log('Answer response data:', JSON.stringify(data).substring(0, 200));
                         
                         // Handle answer
                         if (data.answer && peerConnection && !peerConnection.remoteDescription) {
-                            console.log('Received answer from car');
+                            console.log('Received answer from car! Setting remote description...');
+                            receivedAnswer = true;
+                            document.getElementById('deviceStatus').textContent = 'Establishing P2P...';
                             await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                            console.log('Remote description set successfully');
                         }
                     }
                     
@@ -922,9 +950,9 @@
                         const candidates = await iceResponse.json();
                         
                         if (Array.isArray(candidates) && candidates.length > 0) {
+                            console.log(`Received ${candidates.length} ICE candidate(s) from car`);
                             for (const candidate of candidates) {
                                 if (candidate.candidate) {
-                                    console.log('Received ICE candidate from car');
                                     await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
                                 }
                             }
