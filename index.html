@@ -873,7 +873,8 @@
             
             channel.onerror = (error) => {
                 console.error('Data channel error:', error);
-                debugLog(`Data channel ERROR: ${error}`);
+                const errMsg = error?.error?.message || error?.message || JSON.stringify(error);
+                debugLog(`Data channel ERROR: ${errMsg}`);
             };
             
             channel.onmessage = (event) => {
