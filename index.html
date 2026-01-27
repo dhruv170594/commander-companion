@@ -518,6 +518,9 @@
     </div>
     
     <script>
+        // Cloudflare signaling server
+        const SIGNALING_SERVER = 'https://api.bydcommander.win';
+        
         // Connection info from QR code
         let connectionInfo = null;
         let html5QrCode = null;
@@ -552,6 +555,7 @@
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', () => {
             console.log('Companion app loaded');
+            console.log('Signaling server:', SIGNALING_SERVER);
             
             // Check for cached connection
             const cached = localStorage.getItem(STORAGE_KEY);
@@ -592,7 +596,7 @@
             // Update device info
             if (connectionInfo) {
                 document.getElementById('deviceName').textContent = connectionInfo.deviceName || 'Connected Car';
-                document.getElementById('deviceStatus').textContent = useP2P ? 'Connected via P2P' : 'Connected';
+                document.getElementById('deviceStatus').textContent = useP2P ? 'Connected via P2P' : 'Connecting...';
             }
             
             // Initialize map
@@ -644,15 +648,15 @@
             
             try {
                 // Parse QR code data
-                // Expected format: JSON with {tunnelUrl, deviceToken, deviceName}
+                // Expected format: JSON with {userId, deviceToken, deviceName}
                 const data = JSON.parse(decodedText);
                 
-                if (!data.tunnelUrl || !data.deviceToken) {
+                if (!data.userId || !data.deviceToken) {
                     throw new Error('Invalid QR code format');
                 }
                 
                 connectionInfo = {
-                    tunnelUrl: data.tunnelUrl,
+                    userId: data.userId,
                     deviceToken: data.deviceToken,
                     deviceName: data.deviceName || 'BYD Car',
                     timestamp: Date.now()
@@ -682,61 +686,26 @@
         
         // Connection Functions
         async function connectToDevice() {
-            if (!connectionInfo || !connectionInfo.tunnelUrl) {
+            if (!connectionInfo || !connectionInfo.userId) {
                 showError('No connection info available');
                 showScanScreen();
                 return;
             }
             
             try {
-                // First, register this device with the car
-                console.log('Registering companion device...');
-                const registerResponse = await fetch(`${connectionInfo.tunnelUrl}/api/companion/connect`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Device-Token': connectionInfo.deviceToken
-                    },
-                    body: JSON.stringify({
-                        deviceName: getDeviceName(),
-                        deviceToken: connectionInfo.deviceToken,
-                        timestamp: Date.now()
-                    })
-                });
+                console.log('Starting WebRTC connection for user:', connectionInfo.userId);
                 
-                if (!registerResponse.ok) {
-                    const errorData = await registerResponse.json().catch(() => ({}));
-                    if (registerResponse.status === 401 || registerResponse.status === 403) {
-                        // Token rejected - need to rescan
-                        console.error('Device token rejected');
-                        localStorage.removeItem(STORAGE_KEY);
-                        connectionInfo = null;
-                        showError('Connection expired. Please scan the QR code again.');
-                        showScanScreen();
-                        return;
-                    }
-                    throw new Error(errorData.error || 'Failed to register device');
-                }
-                
-                const registerData = await registerResponse.json();
-                console.log('Device registered:', registerData);
-                
-                // Now initialize WebRTC P2P connection
+                // Initialize WebRTC P2P connection using Cloudflare signaling
                 await initP2P();
                 
             } catch (error) {
                 console.error('Connection error:', error);
+                showError('Connection failed: ' + error.message);
                 
-                // Check if it's a network error (car might be off)
-                if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                    showError('Car is not reachable. Make sure Web Remote Control is enabled.');
-                    updateConnectionStatus(false);
-                    document.getElementById('deviceStatus').textContent = 'Car offline';
-                    showAppScreen(); // Show app anyway with offline status
-                } else {
-                    showError('Connection failed: ' + error.message);
-                    showScanScreen();
-                }
+                // Show app screen anyway with offline status
+                updateConnectionStatus(false);
+                document.getElementById('deviceStatus').textContent = 'Car offline';
+                showAppScreen();
             }
         }
         
@@ -754,10 +723,10 @@
             return 'Web Browser';
         }
         
-        // WebRTC P2P Connection using HTTP signaling
+        // WebRTC P2P Connection using Cloudflare signaling
         async function initP2P() {
             try {
-                console.log('Initializing P2P connection...');
+                console.log('Initializing P2P connection with Cloudflare signaling...');
                 
                 createPeerConnection();
                 
@@ -771,10 +740,10 @@
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
                 
-                console.log('Sending offer to car...');
+                console.log('Sending offer to signaling server...');
                 
-                // Send offer via HTTP
-                const offerResponse = await fetch(`${connectionInfo.tunnelUrl}/api/webrtc/offer`, {
+                // Send offer via Cloudflare signaling
+                const offerResponse = await fetch(`${SIGNALING_SERVER}/signaling/${connectionInfo.userId}/offer`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -785,7 +754,8 @@
                             type: offer.type,
                             sdp: offer.sdp
                         },
-                        deviceToken: connectionInfo.deviceToken
+                        deviceToken: connectionInfo.deviceToken,
+                        deviceName: getDeviceName()
                     })
                 });
                 
@@ -795,6 +765,9 @@
                 
                 console.log('Offer sent, polling for answer...');
                 
+                // Show app screen while waiting for connection
+                showAppScreen();
+                
                 // Poll for answer
                 startSignalingPoll();
                 
@@ -802,6 +775,7 @@
                 console.error('P2P initialization error:', error);
                 updateConnectionStatus(false);
                 showError('Failed to initialize P2P connection: ' + error.message);
+                showAppScreen();
             }
         }
         
@@ -813,19 +787,16 @@
                 if (event.candidate && connectionInfo) {
                     console.log('Sending ICE candidate...');
                     try {
-                        await fetch(`${connectionInfo.tunnelUrl}/api/webrtc/ice`, {
+                        await fetch(`${SIGNALING_SERVER}/signaling/${connectionInfo.userId}/ice/web`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                                 'X-Device-Token': connectionInfo.deviceToken
                             },
                             body: JSON.stringify({
-                                candidate: {
-                                    candidate: event.candidate.candidate,
-                                    sdpMLineIndex: event.candidate.sdpMLineIndex,
-                                    sdpMid: event.candidate.sdpMid
-                                },
-                                deviceToken: connectionInfo.deviceToken
+                                candidate: event.candidate.candidate,
+                                sdpMLineIndex: event.candidate.sdpMLineIndex,
+                                sdpMid: event.candidate.sdpMid
                             })
                         });
                     } catch (err) {
@@ -839,17 +810,18 @@
                 console.log('Peer connection state:', peerConnection.connectionState);
                 if (peerConnection.connectionState === 'connected') {
                     updateConnectionStatus(true);
+                    document.getElementById('deviceStatus').textContent = 'Connected via P2P';
                     stopSignalingPoll();
-                    showAppScreen();
                 } else if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
                     updateConnectionStatus(false);
+                    document.getElementById('deviceStatus').textContent = 'Disconnected';
                     // Try to reconnect
                     setTimeout(() => {
                         if (!useP2P && connectionInfo) {
                             console.log('Attempting to reconnect...');
                             initP2P();
                         }
-                    }, 3000);
+                    }, 5000);
                 }
             };
             
@@ -865,12 +837,14 @@
                 console.log('Data channel opened');
                 useP2P = true;
                 updateConnectionStatus(true);
+                document.getElementById('deviceStatus').textContent = 'Connected via P2P';
             };
             
             channel.onclose = () => {
                 console.log('Data channel closed');
                 useP2P = false;
                 updateConnectionStatus(false);
+                document.getElementById('deviceStatus').textContent = 'Disconnected';
             };
             
             channel.onerror = (error) => {
@@ -906,7 +880,7 @@
             }
             
             let pollCount = 0;
-            const maxPolls = 30; // 30 seconds timeout
+            const maxPolls = 60; // 60 seconds timeout
             
             signalingPollInterval = setInterval(async () => {
                 pollCount++;
@@ -915,31 +889,44 @@
                     console.error('Signaling timeout');
                     stopSignalingPoll();
                     showError('Connection timeout. Car may be offline.');
+                    document.getElementById('deviceStatus').textContent = 'Car offline';
                     return;
                 }
                 
                 try {
-                    // Poll for answer and ICE candidates
-                    const response = await fetch(`${connectionInfo.tunnelUrl}/api/webrtc/answer?deviceToken=${connectionInfo.deviceToken}`, {
+                    // Poll for answer
+                    const answerResponse = await fetch(`${SIGNALING_SERVER}/signaling/${connectionInfo.userId}/answer`, {
                         headers: {
                             'X-Device-Token': connectionInfo.deviceToken
                         }
                     });
                     
-                    if (response.ok) {
-                        const data = await response.json();
+                    if (answerResponse.ok) {
+                        const data = await answerResponse.json();
                         
                         // Handle answer
                         if (data.answer && peerConnection && !peerConnection.remoteDescription) {
                             console.log('Received answer from car');
                             await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
                         }
+                    }
+                    
+                    // Poll for ICE candidates from car
+                    const iceResponse = await fetch(`${SIGNALING_SERVER}/signaling/${connectionInfo.userId}/ice/car`, {
+                        headers: {
+                            'X-Device-Token': connectionInfo.deviceToken
+                        }
+                    });
+                    
+                    if (iceResponse.ok) {
+                        const candidates = await iceResponse.json();
                         
-                        // Handle ICE candidates
-                        if (data.iceCandidates && data.iceCandidates.length > 0) {
-                            for (const candidate of data.iceCandidates) {
-                                console.log('Received ICE candidate from car');
-                                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                        if (Array.isArray(candidates) && candidates.length > 0) {
+                            for (const candidate of candidates) {
+                                if (candidate.candidate) {
+                                    console.log('Received ICE candidate from car');
+                                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                                }
                             }
                         }
                     }
@@ -979,20 +966,6 @@
                     updateInterval = null;
                 }
                 
-                // Notify car
-                if (connectionInfo && connectionInfo.tunnelUrl) {
-                    fetch(`${connectionInfo.tunnelUrl}/api/companion/disconnect`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Device-Token': connectionInfo.deviceToken
-                        },
-                        body: JSON.stringify({
-                            deviceToken: connectionInfo.deviceToken
-                        })
-                    }).catch(() => {}); // Ignore errors
-                }
-                
                 // Clear cached connection
                 localStorage.removeItem(STORAGE_KEY);
                 connectionInfo = null;
@@ -1024,7 +997,7 @@
             }, 5000);
         }
         
-        // Send command via P2P or HTTP
+        // Send command via P2P
         async function sendCommand(action, params = {}) {
             if (!connectionInfo) {
                 showError('Not connected to car');
@@ -1035,21 +1008,7 @@
                 // Send via P2P data channel
                 return sendP2PRequest('POST', `/api/actions/${action}`, params);
             } else {
-                // Send via HTTP
-                try {
-                    const response = await fetch(`${connectionInfo.tunnelUrl}/api/actions/${action}`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Device-Token': connectionInfo.deviceToken
-                        },
-                        body: JSON.stringify(params)
-                    });
-                    return await response.json();
-                } catch (error) {
-                    console.error('Command error:', error);
-                    showError('Failed to send command: ' + error.message);
-                }
+                showError('Not connected to car. Please wait for P2P connection.');
             }
         }
         
@@ -1126,22 +1085,13 @@
         
         async function fetchStatus() {
             if (!connectionInfo) return;
+            if (!useP2P || !dataChannel || dataChannel.readyState !== 'open') return;
             
             try {
-                let data;
-                
-                if (useP2P && dataChannel && dataChannel.readyState === 'open') {
-                    data = await sendP2PRequest('GET', '/api/status');
-                } else {
-                    const response = await fetch(`${connectionInfo.tunnelUrl}/api/status`, {
-                        headers: {
-                            'X-Device-Token': connectionInfo.deviceToken
-                        }
-                    });
-                    data = await response.json();
+                const data = await sendP2PRequest('GET', '/api/car/status');
+                if (data && data.body) {
+                    updateUI(data.body);
                 }
-                
-                updateUI(data);
             } catch (error) {
                 console.warn('Status fetch error:', error);
             }
@@ -1160,18 +1110,39 @@
             if (data.evRange !== undefined) {
                 document.getElementById('evRangeValue').textContent = Math.round(data.evRange) + ' km';
             }
-            if (data.totalMileage !== undefined) {
-                document.getElementById('totalMileageValue').textContent = Math.round(data.totalMileage) + ' km';
+            if (data.mileage && data.mileage.total !== undefined) {
+                document.getElementById('totalMileageValue').textContent = Math.round(data.mileage.total) + ' km';
             }
             
             // Update location
-            if (data.latitude && data.longitude) {
-                updateCarLocation(data.latitude, data.longitude);
+            if (data.location && data.location.lat && data.location.lng) {
+                updateCarLocation(data.location.lat, data.location.lng);
             }
             
             // Update AC temp
-            if (data.acTemp !== undefined) {
-                document.getElementById('acTempDisplay').textContent = data.acTemp + '°C';
+            if (data.ac && data.ac.temp !== undefined) {
+                document.getElementById('acTempDisplay').textContent = data.ac.temp + '°C';
+                currentAcTemp = data.ac.temp;
+            }
+            
+            // Update windows
+            if (data.windows) {
+                if (data.windows.lf !== undefined) {
+                    document.getElementById('windowLF').value = data.windows.lf;
+                    document.getElementById('windowLFValue').textContent = data.windows.lf;
+                }
+                if (data.windows.rf !== undefined) {
+                    document.getElementById('windowRF').value = data.windows.rf;
+                    document.getElementById('windowRFValue').textContent = data.windows.rf;
+                }
+                if (data.windows.lr !== undefined) {
+                    document.getElementById('windowLR').value = data.windows.lr;
+                    document.getElementById('windowLRValue').textContent = data.windows.lr;
+                }
+                if (data.windows.rr !== undefined) {
+                    document.getElementById('windowRR').value = data.windows.rr;
+                    document.getElementById('windowRRValue').textContent = data.windows.rr;
+                }
             }
         }
         
@@ -1181,28 +1152,27 @@
         function adjustAcTemp(delta) {
             currentAcTemp = Math.min(30, Math.max(16, currentAcTemp + delta));
             document.getElementById('acTempDisplay').textContent = currentAcTemp + '°C';
-            sendCommand('setAcTemp', { temperature: currentAcTemp });
+            sendCommand('setAcTemperature', { temperature: currentAcTemp });
         }
         
         // Window slider handlers
-        document.addEventListener('DOMContentLoaded', () => {
-            ['LF', 'RF', 'LR', 'RR'].forEach(window => {
-                const slider = document.getElementById('window' + window);
-                const valueDisplay = document.getElementById('window' + window + 'Value');
+        ['LF', 'RF', 'LR', 'RR'].forEach(windowId => {
+            const slider = document.getElementById('window' + windowId);
+            const valueDisplay = document.getElementById('window' + windowId + 'Value');
+            
+            if (slider) {
+                slider.addEventListener('input', () => {
+                    valueDisplay.textContent = slider.value;
+                });
                 
-                if (slider) {
-                    slider.addEventListener('input', () => {
-                        valueDisplay.textContent = slider.value;
+                slider.addEventListener('change', () => {
+                    const windowMap = { 'LF': 1, 'RF': 2, 'LR': 3, 'RR': 4 };
+                    sendCommand('setWindowToPercentage', {
+                        area: windowMap[windowId],
+                        percent: parseInt(slider.value)
                     });
-                    
-                    slider.addEventListener('change', () => {
-                        sendCommand('setWindowPosition', {
-                            window: window,
-                            position: parseInt(slider.value)
-                        });
-                    });
-                }
-            });
+                });
+            }
         });
     </script>
 </body>
