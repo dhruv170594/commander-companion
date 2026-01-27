@@ -1129,29 +1129,52 @@
             }
         }
         
+        // ICE candidate batching
+        let iceCandidateBuffer = [];
+        let iceSendTimeout = null;
+        
+        async function flushIceCandidates() {
+            if (iceCandidateBuffer.length === 0 || !connectionInfo) return;
+            
+            const candidates = [...iceCandidateBuffer];
+            iceCandidateBuffer = [];
+            
+            console.log(`Sending ${candidates.length} batched ICE candidates...`);
+            try {
+                await fetch(`${SIGNALING_SERVER}/signaling/${connectionInfo.userId}/ice/web`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Device-Token': connectionInfo.deviceToken
+                    },
+                    body: JSON.stringify(candidates)
+                });
+            } catch (err) {
+                console.error('Error sending ICE candidates:', err);
+            }
+        }
+        
         function createPeerConnection() {
             peerConnection = new RTCPeerConnection(rtcConfig);
+            iceCandidateBuffer = [];
             
-            // Handle ICE candidates
-            peerConnection.onicecandidate = async (event) => {
+            // Handle ICE candidates - batch them
+            peerConnection.onicecandidate = (event) => {
                 if (event.candidate && connectionInfo) {
-                    console.log('Sending ICE candidate...');
-                    try {
-                        await fetch(`${SIGNALING_SERVER}/signaling/${connectionInfo.userId}/ice/web`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-Device-Token': connectionInfo.deviceToken
-                            },
-                            body: JSON.stringify({
-                                candidate: event.candidate.candidate,
-                                sdpMLineIndex: event.candidate.sdpMLineIndex,
-                                sdpMid: event.candidate.sdpMid
-                            })
-                        });
-                    } catch (err) {
-                        console.error('Error sending ICE candidate:', err);
-                    }
+                    iceCandidateBuffer.push({
+                        candidate: event.candidate.candidate,
+                        sdpMLineIndex: event.candidate.sdpMLineIndex,
+                        sdpMid: event.candidate.sdpMid
+                    });
+                    
+                    // Debounce - wait 500ms for more candidates before sending
+                    if (iceSendTimeout) clearTimeout(iceSendTimeout);
+                    iceSendTimeout = setTimeout(flushIceCandidates, 500);
+                } else if (!event.candidate) {
+                    // ICE gathering complete - send any remaining
+                    console.log('ICE gathering complete');
+                    if (iceSendTimeout) clearTimeout(iceSendTimeout);
+                    flushIceCandidates();
                 }
             };
             
