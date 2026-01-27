@@ -11,10 +11,8 @@
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <!-- QR Code Scanner Library -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -150,6 +148,7 @@
             background: #2F3540;
             outline: none;
             -webkit-appearance: none;
+            appearance: none;
         }
         .slider::-webkit-slider-thumb {
             -webkit-appearance: none;
@@ -255,7 +254,9 @@
             margin-bottom: 8px;
             color: #F1F3F6;
         }
-        .login-container {
+        
+        /* QR Scanner Screen */
+        .scan-container {
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -264,18 +265,19 @@
             padding: 20px;
             text-align: center;
         }
-        .login-title {
+        .scan-title {
             font-size: 28px;
             font-weight: bold;
             margin-bottom: 8px;
             color: #F1F3F6;
         }
-        .login-subtitle {
+        .scan-subtitle {
             font-size: 16px;
             color: #9AA3AF;
             margin-bottom: 32px;
+            max-width: 300px;
         }
-        .login-button {
+        .scan-button {
             background: #1F8AFF;
             color: white;
             border: none;
@@ -289,13 +291,97 @@
             align-items: center;
             gap: 12px;
         }
-        .login-button:hover {
+        .scan-button:hover {
             background: #1a6fd9;
         }
-        .login-button:disabled {
+        .scan-button:disabled {
             background: #666;
             cursor: not-allowed;
         }
+        .scan-icon {
+            width: 24px;
+            height: 24px;
+        }
+        
+        /* QR Scanner Modal */
+        .scanner-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #111b23;
+            z-index: 2000;
+            flex-direction: column;
+        }
+        .scanner-modal.active {
+            display: flex;
+        }
+        .scanner-header {
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .scanner-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #F1F3F6;
+        }
+        .close-button {
+            background: transparent;
+            border: none;
+            color: #F1F3F6;
+            font-size: 28px;
+            cursor: pointer;
+            padding: 8px;
+        }
+        #qr-reader {
+            flex: 1;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        #qr-reader video {
+            border-radius: 12px;
+        }
+        .scanner-instructions {
+            padding: 16px;
+            text-align: center;
+            color: #9AA3AF;
+            font-size: 14px;
+        }
+        
+        /* Connected device info */
+        .device-info {
+            background: #18273c;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .device-name {
+            font-size: 16px;
+            font-weight: bold;
+            color: #F1F3F6;
+        }
+        .device-status {
+            font-size: 14px;
+            color: #9AA3AF;
+        }
+        .disconnect-button {
+            background: #c62828;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        
         .user-info {
             margin-top: 20px;
             font-size: 14px;
@@ -306,32 +392,46 @@
 <body>
     <div id="connectionBar" class="connection-bar"></div>
     
-    <!-- Login Screen -->
-    <div id="loginScreen" class="login-container">
-        <div class="login-title">Commander Companion</div>
-        <div class="login-subtitle">Sign in with Google to connect to your car</div>
-        <button id="googleSignInButton" class="login-button" onclick="signInWithGoogle()">
-            <svg width="20" height="20" viewBox="0 0 24 24">
-                <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+    <!-- QR Scan Screen -->
+    <div id="scanScreen" class="scan-container">
+        <div class="scan-title">Commander Companion</div>
+        <div class="scan-subtitle">Scan the QR code on your car's Commander app to connect</div>
+        <button id="scanButton" class="scan-button" onclick="openScanner()">
+            <svg class="scan-icon" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 5v4h2V5h4V3H5a2 2 0 0 0-2 2zm2 10H3v4a2 2 0 0 0 2 2h4v-2H5v-4zm14 4h-4v2h4a2 2 0 0 0 2-2v-4h-2v4zm0-14h-4v2h4v4h2V5a2 2 0 0 0-2-2z"/>
+                <path d="M7 7h4v4H7zm0 6h4v4H7zm6-6h4v4h-4zm0 6h4v4h-4z"/>
             </svg>
-            Sign in with Google
+            Scan QR Code
         </button>
-        <div id="userInfo" class="user-info" style="display: none;"></div>
+        <div id="scanStatus" class="user-info" style="display: none;"></div>
     </div>
     
-    <!-- Sign out button (shown when connected) -->
-    <button id="signOutButton" class="login-button" onclick="signOut()" style="display: none; position: fixed; bottom: 20px; right: 20px; padding: 10px 16px; font-size: 14px;">
-        Sign Out
-    </button>
+    <!-- QR Scanner Modal -->
+    <div id="scannerModal" class="scanner-modal">
+        <div class="scanner-header">
+            <span class="scanner-title">Scan QR Code</span>
+            <button class="close-button" onclick="closeScanner()">&times;</button>
+        </div>
+        <div id="qr-reader"></div>
+        <div class="scanner-instructions">
+            Point your camera at the QR code shown on the Commander app's Web Remote Control settings
+        </div>
+    </div>
     
     <div id="errorMessage" class="error" style="display: none;"></div>
     
     <div id="loading" class="loading" style="display: none;">Connecting to your car...</div>
     
     <div id="content" style="display: none;">
+        <!-- Connected Device Info -->
+        <div id="deviceInfo" class="device-info">
+            <div>
+                <div id="deviceName" class="device-name">Connected Car</div>
+                <div id="deviceStatus" class="device-status">Connected</div>
+            </div>
+            <button class="disconnect-button" onclick="disconnectDevice()">Disconnect</button>
+        </div>
+        
         <!-- Map -->
         <div class="map-container">
             <div id="map"></div>
@@ -397,25 +497,12 @@
             <div class="segmented-control-label">Temperature</div>
             <div class="segmented-control">
                 <button class="decrement-btn" onclick="adjustAcTemp(-1)">−</button>
-                <div class="value-display" id="acTempValue">22°C</div>
+                <span class="value-display" id="acTempDisplay">22°C</span>
                 <button class="increment-btn" onclick="adjustAcTemp(1)">+</button>
             </div>
-            <div class="segmented-control-label">Wind Speed</div>
-            <div class="segmented-control">
-                <button class="decrement-btn" onclick="adjustAcFan(-1)">−</button>
-                <div class="value-display" id="acFanValue">4</div>
-                <button class="increment-btn" onclick="adjustAcFan(1)">+</button>
-            </div>
-        </div>
-        
-        <!-- Media Volume -->
-        <div class="control-section">
-            <div class="section-title">Media Volume</div>
-            <div class="segmented-control-label">Volume</div>
-            <div class="segmented-control">
-                <button class="decrement-btn" onclick="adjustVolume(-1)">−</button>
-                <div class="value-display" id="volumeValue">20</div>
-                <button class="increment-btn" onclick="adjustVolume(1)">+</button>
+            <div class="button-group">
+                <button onclick="sendCommand('setAcState', {enabled: true})">AC On</button>
+                <button onclick="sendCommand('setAcState', {enabled: false})">AC Off</button>
             </div>
         </div>
         
@@ -431,713 +518,288 @@
     </div>
     
     <script>
-        // Firebase Configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyBLdR1rB7z2O9Q8L0l2RHPm2rQ3sFnnG9M",
-            authDomain: "byd-commander.firebaseapp.com",
-            projectId: "byd-commander",
-            storageBucket: "byd-commander.firebasestorage.app",
-            messagingSenderId: "709147036416",
-            appId: "1:709147036416:web:ecf4b7b5915898b52881e5",
-            measurementId: "G-L8EKTDSNZG"
-        };
-        
-        // Initialize Firebase
-        let auth, db;
-        try {
-            firebase.initializeApp(firebaseConfig);
-            auth = firebase.auth();
-            db = firebase.firestore();
-            
-            // Enable Firestore offline persistence (helps with network issues)
-            db.enablePersistence({
-                synchronizeTabs: false
-            }).catch((err) => {
-                if (err.code === 'failed-precondition') {
-                    console.warn('Firestore persistence failed: Multiple tabs open');
-                } else if (err.code === 'unimplemented') {
-                    console.warn('Firestore persistence not available in this browser');
-                } else {
-                    console.warn('Firestore persistence error:', err);
-                }
-            });
-            
-            // Monitor Firestore connectivity
-            db.settings({
-                cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED
-            });
-            
-            // Listen for Firestore connectivity issues
-            db.collection('_').limit(0).get().then(() => {
-                console.log('✓ Firestore connectivity test: SUCCESS');
-            }).catch((err) => {
-                console.error('✗ Firestore connectivity test: FAILED');
-                console.error('Firestore error:', err.code, err.message);
-                console.error('This indicates Firestore is blocked or unreachable');
-                console.error('Possible causes:');
-                console.error('1. Cloudflare blocking firestore.googleapis.com');
-                console.error('2. Network connectivity issues');
-                console.error('3. Firestore security rules blocking access');
-            });
-            
-            // Test Firebase connectivity
-            console.log('Firebase initialized successfully');
-            console.log('Current domain:', window.location.hostname);
-            console.log('Firebase auth domain:', firebaseConfig.authDomain);
-            console.log('Firebase project ID:', firebaseConfig.projectId);
-            
-            // Log important info for debugging
-            console.log('=== Firebase Configuration Check ===');
-            console.log('Make sure these are set in Firebase Console:');
-            console.log('1. Domain authorized:', window.location.hostname);
-            console.log('2. Google sign-in provider enabled');
-            console.log('=====================================');
-            
-            // Test network connectivity to Firebase
-            testFirebaseNetwork();
-        } catch (initError) {
-            console.error('Firebase initialization failed:', initError);
-            showError('Failed to initialize Firebase. Please check your configuration.');
-        }
-        
-        // Test Firebase network connectivity
-        async function testFirebaseNetwork() {
-            try {
-                console.log('Testing Firebase network connectivity...');
-                // Test if we can reach Firebase auth domain
-                const testUrl = `https://${firebaseConfig.authDomain}`;
-                console.log('Testing URL:', testUrl);
-                
-                // Try a simple fetch to see if domain is reachable
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 5000);
-                
-                try {
-                    const response = await fetch(testUrl, {
-                        method: 'HEAD',
-                        mode: 'no-cors',
-                        signal: controller.signal
-                    });
-                    clearTimeout(timeoutId);
-                    console.log('✓ Firebase domain is reachable');
-                } catch (fetchError) {
-                    clearTimeout(timeoutId);
-                    if (fetchError.name === 'AbortError') {
-                        console.warn('⚠ Firebase domain test timed out (may be normal due to CORS)');
-                    } else {
-                        console.warn('⚠ Firebase domain test failed (may be normal due to CORS):', fetchError.message);
-                    }
-                }
-            } catch (error) {
-                console.warn('Firebase network test error:', error);
-            }
-        }
-        
-        // Use relative paths - they work from the same origin
-        const API_BASE = '';
-        let updateInterval = null;
-        let map = null;
-        let carMarker = null;
-        let currentUser = null;
-        let deviceConnectionInfo = null;
+        // Connection info from QR code
+        let connectionInfo = null;
+        let html5QrCode = null;
         
         // WebRTC P2P Connection
-        let signalingSocket = null;
         let peerConnection = null;
         let dataChannel = null;
         let useP2P = false;
         let pendingRequests = new Map();
         let requestIdCounter = 0;
+        let signalingPollInterval = null;
+        
+        // Map
+        let map = null;
+        let carMarker = null;
+        let updateInterval = null;
         
         // STUN/TURN servers for NAT traversal - Metered.ca configuration
         const rtcConfig = {
             iceServers: [
-                {
-                    urls: "stun:stun.relay.metered.ca:80",
-                },
-                {
-                    urls: "turn:global.relay.metered.ca:80",
-                    username: "59300173e16020ec8eb46bc6",
-                    credential: "JkXmsWLaInmBZ3YB",
-                },
-                {
-                    urls: "turn:global.relay.metered.ca:80?transport=tcp",
-                    username: "59300173e16020ec8eb46bc6",
-                    credential: "JkXmsWLaInmBZ3YB",
-                },
-                {
-                    urls: "turn:global.relay.metered.ca:443",
-                    username: "59300173e16020ec8eb46bc6",
-                    credential: "JkXmsWLaInmBZ3YB",
-                },
-                {
-                    urls: "turns:global.relay.metered.ca:443?transport=tcp",
-                    username: "59300173e16020ec8eb46bc6",
-                    credential: "JkXmsWLaInmBZ3YB",
-                },
+                { urls: "stun:stun.relay.metered.ca:80" },
+                { urls: "turn:global.relay.metered.ca:80", username: "59300173e16020ec8eb46bc6", credential: "JkXmsWLaInmBZ3YB" },
+                { urls: "turn:global.relay.metered.ca:80?transport=tcp", username: "59300173e16020ec8eb46bc6", credential: "JkXmsWLaInmBZ3YB" },
+                { urls: "turn:global.relay.metered.ca:443", username: "59300173e16020ec8eb46bc6", credential: "JkXmsWLaInmBZ3YB" },
+                { urls: "turns:global.relay.metered.ca:443?transport=tcp", username: "59300173e16020ec8eb46bc6", credential: "JkXmsWLaInmBZ3YB" },
             ],
         };
         
-        // Google Sign-In
-        async function signInWithGoogle() {
-            try {
-                const button = document.getElementById('googleSignInButton');
-                button.disabled = true;
-                button.textContent = 'Signing in...';
-                
-                // Check if auth is available
-                if (!auth) {
-                    throw new Error('Firebase auth not initialized. Please refresh the page.');
-                }
-                
-                // Verify domain is authorized
-                console.log('Current hostname:', window.location.hostname);
-                console.log('Firebase auth domain:', firebaseConfig.authDomain);
-                console.log('Current protocol:', window.location.protocol);
-                
-                // Check if we're on HTTPS (required for Firebase auth)
-                if (window.location.protocol !== 'https:') {
-                    const errorMsg = 'Firebase authentication requires HTTPS! Current protocol: ' + window.location.protocol + '\n\n' +
-                        'Please enable SSL/TLS in Cloudflare:\n' +
-                        '1. Go to Cloudflare Dashboard → SSL/TLS\n' +
-                        '2. Set encryption mode to "Full" or "Full (strict)"\n' +
-                        '3. Make sure your site redirects HTTP to HTTPS\n' +
-                        '4. Access the site via https://bydcommander.win';
-                    console.error(errorMsg);
-                    showError(errorMsg);
-                    button.disabled = false;
-                    button.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Sign in with Google';
-                    return;
-                }
-                
-                const provider = new firebase.auth.GoogleAuthProvider();
-                
-                // Add custom parameters for better compatibility
-                provider.setCustomParameters({
-                    prompt: 'select_account'
-                });
-                
-                // Use redirect directly - it's more reliable for network issues
-                console.log('Initiating redirect sign-in...');
-                console.log('Provider:', provider);
-                console.log('Auth object:', auth);
-                console.log('Current URL:', window.location.href);
-                console.log('Protocol:', window.location.protocol);
-                console.log('Is HTTPS:', window.location.protocol === 'https:');
-                
-                // Set the redirect URL explicitly
-                const redirectUrl = window.location.origin + window.location.pathname;
-                console.log('Redirect URL will be:', redirectUrl);
-                
-                // Test if we can reach Google OAuth endpoints directly
-                console.log('Testing Google OAuth connectivity...');
-                const googleEndpoints = [
-                    'https://accounts.google.com/.well-known/openid-configuration',
-                    'https://identitytoolkit.googleapis.com/v1/projects',
-                    'https://securetoken.googleapis.com/v1/token',
-                    'https://oauth2.googleapis.com/token'
-                ];
-                
-                for (const endpoint of googleEndpoints) {
-                    try {
-                        console.log(`Testing: ${endpoint}`);
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 3000);
-                        
-                        const testResponse = await fetch(endpoint, { 
-                            method: 'HEAD', 
-                            mode: 'no-cors',
-                            cache: 'no-cache',
-                            signal: controller.signal
-                        });
-                        clearTimeout(timeoutId);
-                        console.log(`✓ ${endpoint} - reachable`);
-                    } catch (testError) {
-                        if (testError.name === 'AbortError') {
-                            console.warn(`⚠ ${endpoint} - TIMEOUT (may be blocked by browser)`);
-                        } else {
-                            console.warn(`⚠ ${endpoint} - failed (may be normal due to CORS):`, testError.message);
-                        }
-                    }
-                }
-                
-                // Check if requests are being blocked by monitoring network activity
-                console.log('=== Network Diagnostics ===');
-                console.log('Before calling signInWithRedirect, check:');
-                console.log('1. Open DevTools → Network tab');
-                console.log('2. Filter by "googleapis.com" or "google.com"');
-                console.log('3. Look for RED/BLOCKED requests');
-                console.log('4. Check browser console for CORS or network errors');
-                console.log('==========================');
-                
-                // Try popup first (different code path, might work if redirect fails)
-                console.log('Attempting sign-in with popup method...');
-                showError('Opening Google sign-in popup...');
-                
-                try {
-                    const popupPromise = auth.signInWithPopup(provider);
-                    const timeoutPromise = new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Popup sign-in timeout')), 30000)
-                    );
-                    
-                    const result = await Promise.race([popupPromise, timeoutPromise]);
-                    console.log('Popup sign-in successful!');
-                    currentUser = result.user;
-                    console.log('Signed in as:', currentUser.email);
-                    
-                    // Update Firestore (same way as Commander app - fire-and-forget)
-                    console.log('Attempting to update Firestore for user:', currentUser.uid);
-                    db.collection('deviceConnections').doc(currentUser.uid).update({
-                        companionAppSignedIn: true,
-                        lastCompanionSignIn: firebase.firestore.Timestamp.now()
-                    }).then(() => {
-                        console.log('✓ Firestore updated: companion app user signed in');
-                    }).catch((e) => {
-                        console.error('✗ FAILED to update Firestore sign-in status:', e);
-                        console.error('Error code:', e.code);
-                        console.error('Error message:', e.message);
-                        console.error('This might be blocked by Cloudflare or network issues');
-                    });
-                    
-                    // Load device connection and show app (same flow as Commander app)
-                    await loadDeviceConnection();
-                    return;
-                } catch (popupError) {
-                    console.warn('Popup sign-in failed, trying redirect method:', popupError);
-                    console.warn('Popup error code:', popupError.code);
-                    console.warn('Popup error message:', popupError.message);
-                    
-                    // If popup fails, try redirect
-                    if (popupError.code === 'auth/popup-blocked' || 
-                        popupError.code === 'auth/popup-closed-by-user') {
-                        console.log('Popup blocked/closed, using redirect method...');
-                        showError('Redirecting to Google sign-in...');
-                    } else {
-                        console.log('Popup failed with network error, trying redirect as fallback...');
-                        showError('Trying redirect method...');
-                    }
-                    
-                    // Try redirect as fallback
-                    try {
-                        console.log('Calling signInWithRedirect...');
-                        console.log('If this fails, check browser Network tab for blocked requests to:');
-                        console.log('- identitytoolkit.googleapis.com');
-                        console.log('- securetoken.googleapis.com');
-                        console.log('- accounts.google.com');
-                        console.log('- oauth2.googleapis.com');
-                        
-                        const redirectPromise = auth.signInWithRedirect(provider);
-                        const timeoutPromise = new Promise((_, reject) => 
-                            setTimeout(() => reject(new Error('Redirect timeout')), 10000)
-                        );
-                        
-                        await Promise.race([redirectPromise, timeoutPromise]);
-                        console.log('Redirect initiated successfully');
-                        return; // Will redirect, so we won't reach here
-                    } catch (redirectError) {
-                        console.error('Both popup and redirect methods failed!');
-                        console.error('Redirect error:', redirectError);
-                        console.error('Error details:', {
-                            code: redirectError.code,
-                            message: redirectError.message
-                        });
-                        console.error('');
-                        console.error('=== DIAGNOSTIC STEPS ===');
-                        console.error('1. Browser Network Tab (MOST IMPORTANT):');
-                        console.error('   - Open DevTools (F12) → Network tab');
-                        console.error('   - Filter by: googleapis.com OR google.com');
-                        console.error('   - Click "Sign in" again and watch for requests');
-                        console.error('   - Look for RED/BLOCKED requests');
-                        console.error('   - Check status codes: 403=blocked, 429=rate limited, CORS=blocked');
-                        console.error('');
-                        console.error('2. Browser Extensions:');
-                        console.error('   - Disable ALL extensions (ad blockers, privacy tools)');
-                        console.error('   - Try incognito/private mode (extensions disabled)');
-                        console.error('   - Try different browser (Chrome, Firefox, Safari)');
-                        console.error('');
-                        console.error('3. Firebase Configuration:');
-                        console.error('   - Verify domain is authorized in Firebase Console');
-                        console.error('   - Check Firebase Console → Authentication → Settings');
-                        console.error('   - Ensure Google sign-in provider is enabled');
-                        console.error('===========================');
-                        throw redirectError; // Re-throw to be caught by outer catch
-                    }
-                }
-                
-                // OLD CODE - keeping for reference but not using
-                /*
-                // Try popup first, fallback to redirect if popup fails
-                let result;
-                try {
-                    // Set a timeout for popup to avoid hanging
-                    const popupPromise = auth.signInWithPopup(provider);
-                    const timeoutPromise = new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Sign-in timeout')), 30000)
-                    );
-                    result = await Promise.race([popupPromise, timeoutPromise]);
-                } catch (popupError) {
-                    console.warn('Popup sign-in failed, trying redirect:', popupError);
-                    console.warn('Error code:', popupError.code);
-                    console.warn('Error message:', popupError.message);
-                    
-                    // If popup fails for any reason (network, blocked, etc.), use redirect
-                    if (popupError.code === 'auth/popup-blocked' || 
-                        popupError.code === 'auth/popup-closed-by-user' || 
-                        popupError.code === 'auth/unauthorized-domain' ||
-                        popupError.code === 'auth/network-request-failed' ||
-                        popupError.message === 'Sign-in timeout') {
-                        console.log('Using redirect sign-in method due to:', popupError.code || popupError.message);
-                        showError('Switching to redirect sign-in...');
-                        await auth.signInWithRedirect(provider);
-                        return; // Will return after redirect
-                    }
-                    throw popupError; // Re-throw if it's a different error
-                }
-                
-                currentUser = result.user;
-                console.log('Signed in as:', currentUser.email);
-                await loadDeviceConnection();
-                */
-                
-            } catch (error) {
-                console.error('Sign-in error:', error);
-                console.error('Error code:', error.code);
-                console.error('Error message:', error.message);
-                
-                let errorMessage = 'Failed to sign in: ' + error.message;
-                
-                if (error.code === 'auth/network-request-failed') {
-                    // Check if it's an HTTP vs HTTPS issue
-                    if (window.location.protocol === 'http:') {
-                        errorMessage = `CRITICAL: Site is using HTTP, but Firebase requires HTTPS!\n\n` +
-                            `Firebase authentication will NOT work over HTTP.\n\n` +
-                            `FIX IN CLOUDFLARE:\n` +
-                            `1. Go to Cloudflare Dashboard → SSL/TLS\n` +
-                            `2. Set encryption mode to "Full" or "Full (strict)"\n` +
-                            `3. Go to SSL/TLS → Edge Certificates\n` +
-                            `4. Enable "Always Use HTTPS"\n` +
-                            `5. Access site via: https://bydcommander.win (not http://)\n\n` +
-                            `Current URL: ${window.location.href}\n` +
-                            `Required: https://${window.location.hostname}${window.location.pathname}`;
-                    } else {
-                        errorMessage = `Network error: Firebase cannot reach Google OAuth servers.\n\n` +
-                            `HTTPS is enabled, but the request is still failing.\n\n` +
-                            `IMMEDIATE STEPS:\n` +
-                            `1. Open DevTools (F12) → Network tab\n` +
-                            `2. Filter by: googleapis.com\n` +
-                            `3. Click "Sign in" again and watch for requests\n` +
-                            `4. Look for RED/BLOCKED requests\n` +
-                            `5. Check status codes:\n` +
-                            `   - 403 = blocked by browser/extension\n` +
-                            `   - CORS error = blocked by browser\n` +
-                            `   - No request = Firebase SDK issue\n\n` +
-                            `COMMON CAUSES:\n` +
-                            `- Browser extensions (ad blockers, privacy tools)\n` +
-                            `- Browser blocking third-party requests\n` +
-                            `- Firebase SDK making initial API call that fails\n\n` +
-                            `TRY THIS:\n` +
-                            `1. Disable ALL browser extensions\n` +
-                            `2. Try incognito/private mode\n` +
-                            `3. Try different browser\n` +
-                            `4. Check Network tab to see what's actually being blocked\n\n` +
-                            `Current domain: ${window.location.hostname}\n` +
-                            `Protocol: ${window.location.protocol}`;
-                    }
-                } else if (error.code === 'auth/unauthorized-domain') {
-                    errorMessage = `Domain not authorized!\n\n` +
-                        `Please add "${window.location.hostname}" to Firebase authorized domains:\n` +
-                        `1. Go to Firebase Console\n` +
-                        `2. Authentication → Settings → Authorized domains\n` +
-                        `3. Click "Add domain"\n` +
-                        `4. Enter: ${window.location.hostname}\n` +
-                        `5. Click "Add"`;
-                } else if (error.code === 'auth/popup-blocked') {
-                    errorMessage = 'Popup blocked. Please allow popups for this site and try again.';
-                } else if (error.code === 'auth/popup-closed-by-user') {
-                    errorMessage = 'Sign-in cancelled. Please try again.';
-                }
-                
-                showError(errorMessage);
-                const button = document.getElementById('googleSignInButton');
-                button.disabled = false;
-                button.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Sign in with Google';
-            }
-        }
+        // LocalStorage key for cached connection
+        const STORAGE_KEY = 'companion_connection';
         
-        // Flag to prevent double-loading
-        let isHandlingAuth = false;
-        let redirectResultProcessed = false;
-        
-        // Handle redirect result after Google sign-in (check this FIRST on page load)
-        // This is especially important on mobile where redirect is the primary method
-        auth.getRedirectResult().then((result) => {
-            redirectResultProcessed = true;
-            console.log('Redirect result received:', result.user ? 'User signed in' : 'No user');
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Companion app loaded');
             
-            if (result.user) {
-                // User signed in via redirect
-                isHandlingAuth = true;
-                currentUser = result.user;
-                console.log('Signed in via redirect as:', currentUser.email);
-                
-                // Update Firestore (same way as Commander app - fire-and-forget)
-                console.log('Attempting to update Firestore for user:', currentUser.uid);
-                db.collection('deviceConnections').doc(currentUser.uid).update({
-                    companionAppSignedIn: true,
-                    lastCompanionSignIn: firebase.firestore.Timestamp.now()
-                }).then(() => {
-                    console.log('✓ Firestore updated: companion app user signed in (redirect)');
-                }).catch((e) => {
-                    console.error('✗ FAILED to update Firestore sign-in status:', e);
-                    console.error('Error code:', e.code);
-                    console.error('Error message:', e.message);
-                    console.error('This might be blocked by Cloudflare or network issues');
-                });
-                
-                // IMMEDIATELY show app page (don't wait for device connection)
-                document.getElementById('loginScreen').style.display = 'none';
-                document.getElementById('content').style.display = 'block';
-                document.getElementById('signOutButton').style.display = 'block';
-                document.getElementById('userInfo').textContent = `Signed in as: ${currentUser.email}`;
-                document.getElementById('userInfo').style.display = 'block';
-                hideError();
-                isHandlingAuth = false;
-                
-                // Load device connection in background (non-blocking)
-                loadDeviceConnection().catch((error) => {
-                    console.warn('Device connection load failed (non-blocking):', error);
-                });
-            } else if (result.credential) {
-                // Fallback for older Firebase versions
-                isHandlingAuth = true;
-                currentUser = result.user;
-                console.log('Signed in via redirect (credential) as:', currentUser?.email);
-                if (currentUser) {
-                    // Update Firestore (same way as Commander app - fire-and-forget)
-                    console.log('Attempting to update Firestore for user:', currentUser.uid);
-                    db.collection('deviceConnections').doc(currentUser.uid).update({
-                        companionAppSignedIn: true,
-                        lastCompanionSignIn: firebase.firestore.Timestamp.now()
-                    }).then(() => {
-                        console.log('✓ Firestore updated: companion app user signed in (credential)');
-                    }).catch((e) => {
-                        console.error('✗ FAILED to update Firestore sign-in status:', e);
-                        console.error('Error code:', e.code);
-                        console.error('Error message:', e.message);
-                        console.error('This might be blocked by Cloudflare or network issues');
-                    });
+            // Check for cached connection
+            const cached = localStorage.getItem(STORAGE_KEY);
+            if (cached) {
+                try {
+                    connectionInfo = JSON.parse(cached);
+                    console.log('Found cached connection:', connectionInfo.deviceName || 'Unknown device');
                     
-                    // IMMEDIATELY show app page (don't wait for device connection)
-                    document.getElementById('loginScreen').style.display = 'none';
-                    document.getElementById('content').style.display = 'block';
-                    document.getElementById('signOutButton').style.display = 'block';
-                    document.getElementById('userInfo').textContent = `Signed in as: ${currentUser.email}`;
-                    document.getElementById('userInfo').style.display = 'block';
-                    hideError();
-                    isHandlingAuth = false;
+                    // Show connecting status
+                    document.getElementById('scanScreen').style.display = 'none';
+                    document.getElementById('loading').style.display = 'block';
+                    document.getElementById('loading').textContent = 'Reconnecting to ' + (connectionInfo.deviceName || 'your car') + '...';
                     
-                    // Load device connection in background (non-blocking)
-                    loadDeviceConnection().catch((error) => {
-                        console.warn('Device connection load failed (non-blocking):', error);
-                    });
-                } else {
-                    isHandlingAuth = false;
+                    // Try to connect
+                    connectToDevice();
+                } catch (e) {
+                    console.error('Error parsing cached connection:', e);
+                    localStorage.removeItem(STORAGE_KEY);
+                    showScanScreen();
                 }
             } else {
-                // No redirect result - user didn't sign in via redirect
-                console.log('No redirect result - user may be signed in via other method or not signed in');
-            }
-        }).catch((error) => {
-            redirectResultProcessed = true;
-            console.error('Redirect sign-in error:', error);
-            isHandlingAuth = false;
-            // Keep login screen visible on error
-            document.getElementById('loginScreen').style.display = 'flex';
-            document.getElementById('content').style.display = 'none';
-            if (error.code !== 'auth/popup-closed-by-user') {
-                showError('Redirect sign-in failed: ' + error.message);
+                showScanScreen();
             }
         });
         
-        // Load device connection info from Firebase
-        async function loadDeviceConnection() {
-            if (!currentUser) {
-                showError('Please sign in first');
-                document.getElementById('loginScreen').style.display = 'flex';
-                document.getElementById('content').style.display = 'none';
+        function showScanScreen() {
+            document.getElementById('scanScreen').style.display = 'flex';
+            document.getElementById('content').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+            updateConnectionStatus(false);
+        }
+        
+        function showAppScreen() {
+            document.getElementById('scanScreen').style.display = 'none';
+            document.getElementById('content').style.display = 'block';
+            document.getElementById('loading').style.display = 'none';
+            
+            // Update device info
+            if (connectionInfo) {
+                document.getElementById('deviceName').textContent = connectionInfo.deviceName || 'Connected Car';
+                document.getElementById('deviceStatus').textContent = useP2P ? 'Connected via P2P' : 'Connected';
+            }
+            
+            // Initialize map
+            initMap();
+            
+            // Start data updates
+            startDataUpdates();
+        }
+        
+        // QR Scanner Functions
+        function openScanner() {
+            const modal = document.getElementById('scannerModal');
+            modal.classList.add('active');
+            
+            html5QrCode = new Html5Qrcode("qr-reader");
+            
+            html5QrCode.start(
+                { facingMode: "environment" },
+                {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 }
+                },
+                onScanSuccess,
+                onScanFailure
+            ).catch((err) => {
+                console.error('Error starting scanner:', err);
+                showError('Failed to start camera. Please allow camera access.');
+                closeScanner();
+            });
+        }
+        
+        function closeScanner() {
+            const modal = document.getElementById('scannerModal');
+            modal.classList.remove('active');
+            
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
+                    html5QrCode = null;
+                }).catch((err) => {
+                    console.warn('Error stopping scanner:', err);
+                });
+            }
+        }
+        
+        function onScanSuccess(decodedText) {
+            console.log('QR Code scanned:', decodedText);
+            closeScanner();
+            
+            try {
+                // Parse QR code data
+                // Expected format: JSON with {tunnelUrl, deviceToken, deviceName}
+                const data = JSON.parse(decodedText);
+                
+                if (!data.tunnelUrl || !data.deviceToken) {
+                    throw new Error('Invalid QR code format');
+                }
+                
+                connectionInfo = {
+                    tunnelUrl: data.tunnelUrl,
+                    deviceToken: data.deviceToken,
+                    deviceName: data.deviceName || 'BYD Car',
+                    timestamp: Date.now()
+                };
+                
+                // Cache the connection
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(connectionInfo));
+                console.log('Connection info saved:', connectionInfo.deviceName);
+                
+                // Show connecting status
+                document.getElementById('scanScreen').style.display = 'none';
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('loading').textContent = 'Connecting to ' + connectionInfo.deviceName + '...';
+                
+                // Connect to device
+                connectToDevice();
+                
+            } catch (e) {
+                console.error('Error parsing QR code:', e);
+                showError('Invalid QR code. Please scan the QR code from Commander app settings.');
+            }
+        }
+        
+        function onScanFailure(error) {
+            // Ignore continuous scan failures - only log occasionally
+        }
+        
+        // Connection Functions
+        async function connectToDevice() {
+            if (!connectionInfo || !connectionInfo.tunnelUrl) {
+                showError('No connection info available');
+                showScanScreen();
                 return;
             }
             
             try {
-                document.getElementById('loginScreen').style.display = 'flex';
-                document.getElementById('content').style.display = 'none';
-                document.getElementById('loading').style.display = 'block';
-                showError('Looking up your car...');
+                // First, register this device with the car
+                console.log('Registering companion device...');
+                const registerResponse = await fetch(`${connectionInfo.tunnelUrl}/api/companion/connect`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Device-Token': connectionInfo.deviceToken
+                    },
+                    body: JSON.stringify({
+                        deviceName: getDeviceName(),
+                        deviceToken: connectionInfo.deviceToken,
+                        timestamp: Date.now()
+                    })
+                });
                 
-                // Try to get device connection info with offline support
-                console.log('Attempting to load device connection from Firestore for user:', currentUser.uid);
-                let deviceDoc;
-                let isOffline = false;
-                try {
-                    // Use a timeout to detect if Firestore is completely blocked
-                    const timeoutPromise = new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Firestore request timeout - likely blocked by Cloudflare')), 10000)
-                    );
-                    
-                    const fetchPromise = db.collection('deviceConnections').doc(currentUser.uid).get({ source: 'server' });
-                    deviceDoc = await Promise.race([fetchPromise, timeoutPromise]);
-                    console.log('✓ Firestore document retrieved:', deviceDoc.exists ? 'exists' : 'does not exist');
-                } catch (error) {
-                    // If server fetch fails, try cache
-                    console.error('✗ Server fetch FAILED:', error);
-                    console.error('Error code:', error.code);
-                    console.error('Error message:', error.message);
-                    console.error('');
-                    console.error('=== CLOUDFLARE BLOCKING DETECTED ===');
-                    console.error('Firestore requests are being blocked. This is likely Cloudflare blocking firestore.googleapis.com');
-                    console.error('');
-                    console.error('SOLUTION: Configure Cloudflare to allow Firestore:');
-                    console.error('1. Go to Cloudflare Dashboard → Security → WAF');
-                    console.error('2. Add an ALLOW rule for: *.googleapis.com');
-                    console.error('3. Or temporarily disable WAF to test');
-                    console.error('4. Check Rate Limiting settings');
-                    console.error('===================================');
-                    try {
-                        deviceDoc = await db.collection('deviceConnections').doc(currentUser.uid).get({ source: 'cache' });
-                        isOffline = true;
-                        console.log('Using cached data (car may be off)');
-                    } catch (cacheError) {
-                        // No cache either - show UI anyway if user is signed in
-                        console.warn('No cache available, showing UI anyway:', cacheError);
-                        isOffline = true;
-                        deviceDoc = null;
+                if (!registerResponse.ok) {
+                    const errorData = await registerResponse.json().catch(() => ({}));
+                    if (registerResponse.status === 401 || registerResponse.status === 403) {
+                        // Token rejected - need to rescan
+                        console.error('Device token rejected');
+                        localStorage.removeItem(STORAGE_KEY);
+                        connectionInfo = null;
+                        showError('Connection expired. Please scan the QR code again.');
+                        showScanScreen();
+                        return;
                     }
+                    throw new Error(errorData.error || 'Failed to register device');
                 }
                 
-                // NOW show app page (after Firestore update and connection check)
-                document.getElementById('loginScreen').style.display = 'none';
-                document.getElementById('content').style.display = 'block';
-                document.getElementById('signOutButton').style.display = 'block';
-                document.getElementById('userInfo').textContent = `Signed in as: ${currentUser.email}`;
-                document.getElementById('userInfo').style.display = 'block';
+                const registerData = await registerResponse.json();
+                console.log('Device registered:', registerData);
                 
-                // If no document or car is off, show red bar
-                if (!deviceDoc || !deviceDoc.exists) {
-                    console.log('No device connection found or car is off');
-                    // Show red bar (car is off)
-                    const connectionBar = document.getElementById('connectionBar');
-                    if (connectionBar) {
-                        connectionBar.className = 'connection-bar'; // Red (not connected)
-                    }
-                    document.getElementById('loading').style.display = 'none';
-                    showError('Car is off or not connected. The interface is available but controls are disabled.');
-                    return;
-                }
+                // Now initialize WebRTC P2P connection
+                await initP2P();
                 
-                const data = deviceDoc.data();
-                
-                // Check if user is signed in (either Commander app or Companion app)
-                const commanderSignedIn = data.userSignedIn === true;
-                const companionSignedIn = data.companionAppSignedIn === true;
-                const userSignedIn = commanderSignedIn || companionSignedIn;
-                
-                if (!data.enabled && !userSignedIn) {
-                    // Car not enabled and user not signed in
-                    const connectionBar = document.getElementById('connectionBar');
-                    if (connectionBar) {
-                        connectionBar.className = 'connection-bar'; // Red
-                    }
-                    document.getElementById('loading').style.display = 'none';
-                    showError('Car is not connected. Please enable Web Remote Control in the Commander app.');
-                    return;
-                }
-                
-                deviceConnectionInfo = data;
-                console.log('Device connection info:', deviceConnectionInfo);
-                
-                // If car is enabled, try to connect
-                if (data.enabled) {
-                    document.getElementById('loading').style.display = 'block';
-                    showError('Connecting to your car...');
-                    
-                    // Initialize P2P connection with device info
-                    await initP2P();
-                } else {
-                    // Car is off but user is signed in - show UI with red bar
-                    const connectionBar = document.getElementById('connectionBar');
-                    if (connectionBar) {
-                        connectionBar.className = 'connection-bar'; // Red (car is off)
-                    }
-                    document.getElementById('loading').style.display = 'none';
-                    showError('Car is off. The interface is available but controls are disabled.');
-                }
             } catch (error) {
-                console.error('Error loading device connection:', error);
+                console.error('Connection error:', error);
                 
-                // Show UI even on error (Firestore update already completed)
-                document.getElementById('loginScreen').style.display = 'none';
-                document.getElementById('content').style.display = 'block';
-                document.getElementById('signOutButton').style.display = 'block';
-                document.getElementById('userInfo').textContent = `Signed in as: ${currentUser.email}`;
-                document.getElementById('userInfo').style.display = 'block';
-                
-                // Show red bar (car is off/error)
-                const connectionBar = document.getElementById('connectionBar');
-                if (connectionBar) {
-                    connectionBar.className = 'connection-bar'; // Red
-                }
-                
-                document.getElementById('loading').style.display = 'none';
-                
-                // Check if it's an offline error
-                if (error.code === 'unavailable' || error.message.includes('offline')) {
-                    showError('Car is off or unreachable. The interface is available but controls are disabled.');
+                // Check if it's a network error (car might be off)
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    showError('Car is not reachable. Make sure Web Remote Control is enabled.');
+                    updateConnectionStatus(false);
+                    document.getElementById('deviceStatus').textContent = 'Car offline';
+                    showAppScreen(); // Show app anyway with offline status
                 } else {
-                    showError('Failed to load car connection: ' + error.message);
+                    showError('Connection failed: ' + error.message);
+                    showScanScreen();
                 }
             }
         }
         
-        // Initialize WebRTC P2P connection using Firebase Firestore for signaling
+        function getDeviceName() {
+            // Try to get a meaningful device name
+            const ua = navigator.userAgent;
+            if (/iPhone/.test(ua)) return 'iPhone';
+            if (/iPad/.test(ua)) return 'iPad';
+            if (/Android/.test(ua)) {
+                const match = ua.match(/Android[^;]+;\s*([^)]+)/);
+                return match ? match[1].split(' Build')[0] : 'Android Device';
+            }
+            if (/Mac/.test(ua)) return 'Mac';
+            if (/Windows/.test(ua)) return 'Windows PC';
+            return 'Web Browser';
+        }
+        
+        // WebRTC P2P Connection using HTTP signaling
         async function initP2P() {
             try {
-                if (!currentUser || !deviceConnectionInfo) {
-                    showError('Device connection info not available');
-                    return;
-                }
+                console.log('Initializing P2P connection...');
                 
-                console.log('Initializing P2P with Firebase signaling');
+                createPeerConnection();
                 
-                // Use Firebase Firestore for signaling (works remotely)
-                const signalingDoc = db.collection('webrtcSignaling').doc(currentUser.uid);
+                // Create data channel
+                dataChannel = peerConnection.createDataChannel('http-tunnel', {
+                    ordered: true
+                });
+                setupDataChannel(dataChannel);
                 
-                // Listen for answer and ICE candidates from Android device
-                let answerProcessed = false;
-                signalingDoc.onSnapshot((snapshot) => {
-                    if (!snapshot.exists) return;
-                    
-                    const data = snapshot.data();
-                    
-                    // Handle answer (only once)
-                    if (data.answer && !answerProcessed && peerConnection && !peerConnection.remoteDescription) {
-                        console.log('Received answer from Android device');
-                        answerProcessed = true;
-                        handleSignalingMessage({ type: 'answer', sdp: data.answer });
-                    }
-                    
-                    // Handle ICE candidates
-                    if (data.iceCandidate) {
-                        console.log('Received ICE candidate from Android device');
-                        handleSignalingMessage({ type: 'ice-candidate', candidate: data.iceCandidate });
-                        // Clear the candidate after processing
-                        signalingDoc.update({ iceCandidate: firebase.firestore.FieldValue.delete() });
-                    }
+                // Create offer
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                
+                console.log('Sending offer to car...');
+                
+                // Send offer via HTTP
+                const offerResponse = await fetch(`${connectionInfo.tunnelUrl}/api/webrtc/offer`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Device-Token': connectionInfo.deviceToken
+                    },
+                    body: JSON.stringify({
+                        offer: {
+                            type: offer.type,
+                            sdp: offer.sdp
+                        },
+                        deviceToken: connectionInfo.deviceToken
+                    })
                 });
                 
-                // Create peer connection and send offer
-                createPeerConnection();
+                if (!offerResponse.ok) {
+                    throw new Error('Failed to send offer');
+                }
+                
+                console.log('Offer sent, polling for answer...');
+                
+                // Poll for answer
+                startSignalingPoll();
+                
             } catch (error) {
-                console.error('Failed to initialize P2P:', error);
+                console.error('P2P initialization error:', error);
                 updateConnectionStatus(false);
                 showError('Failed to initialize P2P connection: ' + error.message);
             }
@@ -1146,672 +808,401 @@
         function createPeerConnection() {
             peerConnection = new RTCPeerConnection(rtcConfig);
             
-            // Handle ICE candidates - send to Firebase
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate && currentUser) {
-                    const signalingDoc = db.collection('webrtcSignaling').doc(currentUser.uid);
-                    const candidateData = {
-                        candidate: event.candidate.candidate,
-                        sdpMLineIndex: event.candidate.sdpMLineIndex,
-                        sdpMid: event.candidate.sdpMid
-                    };
-                    signalingDoc.update({
-                        webIceCandidate: candidateData,
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                    }).catch(err => console.error('Error sending ICE candidate:', err));
+            // Handle ICE candidates
+            peerConnection.onicecandidate = async (event) => {
+                if (event.candidate && connectionInfo) {
+                    console.log('Sending ICE candidate...');
+                    try {
+                        await fetch(`${connectionInfo.tunnelUrl}/api/webrtc/ice`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Device-Token': connectionInfo.deviceToken
+                            },
+                            body: JSON.stringify({
+                                candidate: {
+                                    candidate: event.candidate.candidate,
+                                    sdpMLineIndex: event.candidate.sdpMLineIndex,
+                                    sdpMid: event.candidate.sdpMid
+                                },
+                                deviceToken: connectionInfo.deviceToken
+                            })
+                        });
+                    } catch (err) {
+                        console.error('Error sending ICE candidate:', err);
+                    }
                 }
             };
             
             // Handle connection state changes
             peerConnection.onconnectionstatechange = () => {
                 console.log('Peer connection state:', peerConnection.connectionState);
-                if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
+                if (peerConnection.connectionState === 'connected') {
+                    updateConnectionStatus(true);
+                    stopSignalingPoll();
+                    showAppScreen();
+                } else if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
                     updateConnectionStatus(false);
+                    // Try to reconnect
                     setTimeout(() => {
-                        if (!useP2P) {
+                        if (!useP2P && connectionInfo) {
+                            console.log('Attempting to reconnect...');
                             initP2P();
                         }
                     }, 3000);
-                } else if (peerConnection.connectionState === 'connected') {
-                    updateConnectionStatus(true);
                 }
             };
             
-            // Handle data channel
+            // Handle incoming data channel
             peerConnection.ondatachannel = (event) => {
                 const channel = event.channel;
                 setupDataChannel(channel);
             };
-            
-            // Create data channel for sending requests
-            dataChannel = peerConnection.createDataChannel('http-tunnel', {
-                ordered: true
-            });
-            setupDataChannel(dataChannel);
-            
-            // Create offer and send to Firebase
-            peerConnection.createOffer()
-                .then(offer => peerConnection.setLocalDescription(offer))
-                .then(() => {
-                    if (currentUser && peerConnection.localDescription) {
-                        const signalingDoc = db.collection('webrtcSignaling').doc(currentUser.uid);
-                        const offerData = {
-                            type: peerConnection.localDescription.type,
-                            sdp: peerConnection.localDescription.sdp
-                        };
-                        signalingDoc.set({
-                            offer: offerData,
-                            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                        }).catch(err => {
-                            console.error('Error sending offer:', err);
-                            showError('Failed to send offer: ' + err.message);
-                        });
-                        console.log('Offer sent to Firebase');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error creating offer:', error);
-                    updateConnectionStatus(false);
-                    showError('Failed to create P2P offer: ' + error.message);
-                });
         }
         
         function setupDataChannel(channel) {
             channel.onopen = () => {
-                console.log('P2P data channel opened');
+                console.log('Data channel opened');
                 useP2P = true;
                 updateConnectionStatus(true);
-                hideError();
-                // Now that P2P is connected, load car data
-                loadCarStatus();
-                // Start auto-refresh only after P2P is connected
-                if (updateInterval) {
-                    clearInterval(updateInterval);
-                }
-                updateInterval = setInterval(loadCarStatus, 3000);
+            };
+            
+            channel.onclose = () => {
+                console.log('Data channel closed');
+                useP2P = false;
+                updateConnectionStatus(false);
+            };
+            
+            channel.onerror = (error) => {
+                console.error('Data channel error:', error);
             };
             
             channel.onmessage = (event) => {
                 try {
                     const response = JSON.parse(event.data);
-                    const request = pendingRequests.get(response.id);
-                    if (request) {
-                        pendingRequests.delete(response.id);
-                        request.resolve(response);
-                    }
-                } catch (error) {
-                    console.error('Error parsing data channel message:', error);
-                }
-            };
-            
-            channel.onerror = (error) => {
-                console.error('Data channel error:', error);
-                useP2P = false;
-                updateConnectionStatus(false);
-                showError('P2P data channel error');
-            };
-            
-            channel.onclose = () => {
-                console.log('P2P data channel closed');
-                useP2P = false;
-                updateConnectionStatus(false);
-                showError('P2P connection lost. Reconnecting...');
-                setTimeout(() => {
-                    if (!useP2P) {
-                        initP2P();
-                    }
-                }, 3000);
-            };
-        }
-        
-        async function handleSignalingMessage(message) {
-            if (!peerConnection) return;
-            
-            try {
-                switch (message.type) {
-                    case 'answer':
-                        // message.sdp is an object with type and sdp from Firebase
-                        const answerSdp = message.sdp;
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription({
-                            type: answerSdp.type || 'answer',
-                            sdp: answerSdp.sdp || answerSdp
-                        }));
-                        break;
-                    case 'ice-candidate':
-                        if (message.candidate) {
-                            // Candidate from Firebase has candidate, sdpMLineIndex, sdpMid
-                            const candidate = message.candidate.candidate || message.candidate;
-                            const sdpMLineIndex = message.candidate.sdpMLineIndex ?? 0;
-                            const sdpMid = message.candidate.sdpMid ?? '0';
-                            await peerConnection.addIceCandidate(new RTCIceCandidate({
-                                candidate: candidate,
-                                sdpMLineIndex: sdpMLineIndex,
-                                sdpMid: sdpMid
-                            }));
+                    
+                    // Handle response to pending request
+                    if (response.requestId && pendingRequests.has(response.requestId)) {
+                        const { resolve, reject } = pendingRequests.get(response.requestId);
+                        pendingRequests.delete(response.requestId);
+                        
+                        if (response.error) {
+                            reject(new Error(response.error));
+                        } else {
+                            resolve(response);
                         }
-                        break;
-                    default:
-                        console.warn('Unknown signaling message type:', message.type);
+                    }
+                } catch (e) {
+                    console.error('Error parsing data channel message:', e);
                 }
-            } catch (error) {
-                console.error('Error handling signaling message:', error);
-            }
-        }
-        
-        
-        function updateConnectionStatus(connected) {
-            const bar = document.getElementById('connectionBar');
-            if (bar) {
-                if (connected) {
-                    bar.className = 'connection-bar connected'; // Green when connected
-                } else {
-                    bar.className = 'connection-bar'; // Red when disconnected/car off
-                }
-            }
-        }
-        
-        function showError(message) {
-            const errorDiv = document.getElementById('errorMessage');
-            if (errorDiv) {
-                errorDiv.textContent = message;
-                errorDiv.style.display = 'block';
-            }
-        }
-        
-        function hideError() {
-            const errorDiv = document.getElementById('errorMessage');
-            if (errorDiv) {
-                errorDiv.style.display = 'none';
-            }
-        }
-        
-        // Override fetch to use P2P WebRTC data channel - no fallback
-        const originalFetch = window.fetch;
-        window.fetch = async function(url, options = {}) {
-            // CRITICAL: Don't intercept Firebase/Google API requests - they need direct HTTP
-            const urlString = typeof url === 'string' ? url : url.toString();
-            const isFirebaseRequest = urlString.includes('firebase') || 
-                                     urlString.includes('googleapis.com') || 
-                                     urlString.includes('firestore.googleapis.com') ||
-                                     urlString.includes('firebasestorage.googleapis.com') ||
-                                     urlString.includes('google.com') ||
-                                     urlString.includes('accounts.google.com') ||
-                                     urlString.includes('identitytoolkit') ||
-                                     urlString.includes('securetoken') ||
-                                     urlString.includes('oauth2');
-            
-            if (isFirebaseRequest) {
-                // Use original fetch for Firebase/Google requests - bypass P2P
-                console.log('Bypassing P2P for Firebase request:', urlString);
-                return originalFetch.apply(this, arguments);
-            }
-            
-            // Only allow requests if P2P data channel is connected
-            if (!useP2P || !dataChannel || dataChannel.readyState !== 'open') {
-                return Promise.reject(new Error('P2P connection not established. Please wait for connection.'));
-            }
-            
-            // Tunnel through P2P data channel
-            const requestId = requestIdCounter++;
-            const request = {
-                id: requestId,
-                url: url,
-                method: options.method || 'GET',
-                headers: options.headers || {},
-                body: options.body || null
             };
             
-            return new Promise((resolve, reject) => {
-                pendingRequests.set(requestId, { resolve, reject });
+            dataChannel = channel;
+        }
+        
+        function startSignalingPoll() {
+            if (signalingPollInterval) {
+                clearInterval(signalingPollInterval);
+            }
+            
+            let pollCount = 0;
+            const maxPolls = 30; // 30 seconds timeout
+            
+            signalingPollInterval = setInterval(async () => {
+                pollCount++;
                 
-                try {
-                    dataChannel.send(JSON.stringify(request));
-                } catch (error) {
-                    pendingRequests.delete(requestId);
-                    reject(new Error('Failed to send P2P request: ' + error.message));
+                if (pollCount > maxPolls) {
+                    console.error('Signaling timeout');
+                    stopSignalingPoll();
+                    showError('Connection timeout. Car may be offline.');
                     return;
                 }
                 
-                // Timeout after 10 seconds
-                setTimeout(() => {
-                    if (pendingRequests.has(requestId)) {
-                        pendingRequests.delete(requestId);
-                        reject(new Error('P2P request timeout'));
+                try {
+                    // Poll for answer and ICE candidates
+                    const response = await fetch(`${connectionInfo.tunnelUrl}/api/webrtc/answer?deviceToken=${connectionInfo.deviceToken}`, {
+                        headers: {
+                            'X-Device-Token': connectionInfo.deviceToken
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        
+                        // Handle answer
+                        if (data.answer && peerConnection && !peerConnection.remoteDescription) {
+                            console.log('Received answer from car');
+                            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                        }
+                        
+                        // Handle ICE candidates
+                        if (data.iceCandidates && data.iceCandidates.length > 0) {
+                            for (const candidate of data.iceCandidates) {
+                                console.log('Received ICE candidate from car');
+                                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                            }
+                        }
                     }
-                }, 10000);
-            }).then(response => {
-                // Convert response to Fetch Response object
-                if (response.body) {
-                    return new Response(JSON.stringify(response.body), {
-                        status: response.status || 200,
-                        statusText: response.statusText || 'OK',
-                        headers: response.headers || {}
-                    });
-                } else {
-                    return new Response(response.text || '', {
-                        status: response.status || 200,
-                        statusText: response.statusText || 'OK',
-                        headers: response.headers || {}
-                    });
+                } catch (err) {
+                    console.warn('Signaling poll error:', err);
                 }
-            }).catch(error => {
-                console.error('P2P request failed:', error);
-                throw error;
-            });
-        };
+            }, 1000);
+        }
         
-        // Sign out function
-        async function signOut() {
-            console.log('Sign out initiated');
-            
-            // Disable sign out button to prevent double-clicks
-            const signOutButton = document.getElementById('signOutButton');
-            if (signOutButton) {
-                signOutButton.disabled = true;
-                signOutButton.textContent = 'Signing out...';
+        function stopSignalingPoll() {
+            if (signalingPollInterval) {
+                clearInterval(signalingPollInterval);
+                signalingPollInterval = null;
             }
-            
-            // Immediately show login screen (don't wait for async operations)
-            document.getElementById('loginScreen').style.display = 'flex';
-            document.getElementById('content').style.display = 'none';
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('signOutButton').style.display = 'none';
-            document.getElementById('userInfo').style.display = 'none';
-            hideError();
-            
-            // Reset sign-in button text and state
-            const signInButton = document.getElementById('googleSignInButton');
-            if (signInButton) {
-                signInButton.disabled = false;
-                signInButton.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Sign in with Google';
-            }
-            
-            // Clear local state immediately
-            currentUser = null;
-            deviceConnectionInfo = null;
-            isHandlingAuth = false;
-            
-            // Stop any update intervals
-            if (updateInterval) {
-                clearInterval(updateInterval);
-                updateInterval = null;
-            }
-            
-            // Close P2P connection (non-blocking)
-            try {
-                if (signalingSocket) {
-                    signalingSocket.close();
-                    signalingSocket = null;
+        }
+        
+        // Disconnect device
+        function disconnectDevice() {
+            if (confirm('Disconnect from this car? You will need to scan the QR code again to reconnect.')) {
+                // Clean up P2P
+                if (dataChannel) {
+                    dataChannel.close();
+                    dataChannel = null;
                 }
                 if (peerConnection) {
                     peerConnection.close();
                     peerConnection = null;
                 }
-                if (dataChannel) {
-                    dataChannel.close();
-                    dataChannel = null;
-                }
                 useP2P = false;
-            } catch (p2pError) {
-                console.warn('Error closing P2P connection:', p2pError);
-            }
-            
-            // Clear Firebase signaling (non-blocking)
-            const userIdBeforeSignOut = currentUser ? currentUser.uid : null;
-            if (userIdBeforeSignOut) {
-                try {
-                    const signalingDoc = db.collection('webrtcSignaling').doc(userIdBeforeSignOut);
-                    signalingDoc.delete().catch(e => {
-                        console.warn('Error deleting signaling doc:', e);
-                    });
-                    
-                    // Update Firestore to record sign-out from companion app (separate from Commander app)
-                    db.collection('deviceConnections').doc(userIdBeforeSignOut).update({
-                        companionAppSignedIn: false,
-                        lastCompanionSignOut: firebase.firestore.Timestamp.now()
-                        // Note: Don't set userSignedIn to false here - Commander app might still be signed in
-                        // Only set userSignedIn to false if BOTH apps are signed out
-                    }).catch(e => {
-                        console.warn('Error updating Firestore sign-out status:', e);
-                    });
-                } catch (signalingError) {
-                    console.warn('Error clearing Firebase signaling:', signalingError);
-                }
-            }
-            
-            // Sign out from Firebase (this will trigger onAuthStateChanged)
-            try {
-                await auth.signOut();
-                console.log('Firebase sign out successful');
-            } catch (authError) {
-                console.error('Error signing out from Firebase:', authError);
-                // Even if sign out fails, we've already cleared the UI
-            }
-            
-            // Reset sign out button
-            if (signOutButton) {
-                signOutButton.disabled = false;
-                signOutButton.textContent = 'Sign Out';
-            }
-            
-            console.log('Signed out successfully');
-        }
-        
-        // Check authentication state on load
-        window.addEventListener('load', () => {
-            // Initialize map (doesn't require auth or P2P)
-            initMap();
-            
-            // Wait for redirect result to be processed, then set up auth state listener
-            const checkRedirectAndSetupAuth = () => {
-                if (!redirectResultProcessed) {
-                    // Wait a bit more for redirect result
-                    setTimeout(checkRedirectAndSetupAuth, 50);
-                    return;
+                
+                // Stop polling
+                stopSignalingPoll();
+                
+                // Stop updates
+                if (updateInterval) {
+                    clearInterval(updateInterval);
+                    updateInterval = null;
                 }
                 
-                // Now set up auth state listener (only after redirect result is processed)
-                auth.onAuthStateChanged(async (user) => {
-                    console.log('Auth state changed:', user ? `User: ${user.email}` : 'No user');
-                    
-                    // Skip if we're already handling redirect result
-                    if (isHandlingAuth) {
-                        console.log('Skipping onAuthStateChanged - already handling redirect result');
-                        return;
-                    }
-                    
-                    if (user) {
-                        // Only proceed if we don't already have this user
-                        if (currentUser && currentUser.uid === user.uid) {
-                            console.log('User already loaded, skipping duplicate load');
-                            return;
-                        }
-                        
-                        currentUser = user;
-                        console.log('User already signed in:', user.email);
-                        
-                        // Update Firestore (same way as Commander app - fire-and-forget)
-                        console.log('Attempting to update Firestore for user:', user.uid);
-                        db.collection('deviceConnections').doc(user.uid).update({
-                            companionAppSignedIn: true,
-                            lastCompanionSignIn: firebase.firestore.Timestamp.now()
-                        }).then(() => {
-                            console.log('✓ Firestore updated: companion app user signed in');
-                        }).catch((e) => {
-                            console.error('✗ FAILED to update Firestore sign-in status:', e);
-                            console.error('Error code:', e.code);
-                            console.error('Error message:', e.message);
-                            console.error('This might be blocked by Cloudflare or network issues');
-                        });
-                        
-                        // IMMEDIATELY show app page (don't wait for device connection)
-                        document.getElementById('loginScreen').style.display = 'none';
-                        document.getElementById('content').style.display = 'block';
-                        document.getElementById('signOutButton').style.display = 'block';
-                        document.getElementById('userInfo').textContent = `Signed in as: ${user.email}`;
-                        document.getElementById('userInfo').style.display = 'block';
-                        hideError();
-                        
-                        // Load device connection in background (non-blocking)
-                        loadDeviceConnection().catch((error) => {
-                            console.warn('Device connection load failed (non-blocking):', error);
-                        });
-                    } else {
-                        // User signed out - show login screen
-                        console.log('User signed out, showing login screen');
-                        currentUser = null;
-                        deviceConnectionInfo = null;
-                        document.getElementById('loginScreen').style.display = 'flex';
-                        document.getElementById('content').style.display = 'none';
-                        document.getElementById('loading').style.display = 'none';
-                        document.getElementById('signOutButton').style.display = 'none';
-                        document.getElementById('userInfo').style.display = 'none';
-                        hideError();
-                    }
-                });
-            };
-            
-            // Start checking
-            checkRedirectAndSetupAuth();
-        });
-        
-        // Initialize map
-        function initMap() {
-            map = L.map('map', {
-                zoomControl: false, // Disable default zoom controls
-                attributionControl: false
-            }).setView([0, 0], 3);
-            
-            // Use OpenStreetMap standard tiles (light mode)
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors',
-                maxZoom: 19
-            }).addTo(map);
-        }
-        
-        // Center map on car location
-        function centerOnCar() {
-            if (map && carMarker) {
-                const location = carMarker.getLatLng();
-                map.setView(location, 16, {animate: true});
+                // Notify car
+                if (connectionInfo && connectionInfo.tunnelUrl) {
+                    fetch(`${connectionInfo.tunnelUrl}/api/companion/disconnect`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Device-Token': connectionInfo.deviceToken
+                        },
+                        body: JSON.stringify({
+                            deviceToken: connectionInfo.deviceToken
+                        })
+                    }).catch(() => {}); // Ignore errors
+                }
+                
+                // Clear cached connection
+                localStorage.removeItem(STORAGE_KEY);
+                connectionInfo = null;
+                
+                // Show scan screen
+                showScanScreen();
             }
         }
         
-        // Update map with car location (without auto-centering)
-        function updateMapLocation(lat, lon) {
-            if (!map) return;
-            
-            if (lat != null && lon != null && lat !== 0 && lon !== 0) {
-                const location = [lat, lon];
-                
-                if (carMarker) {
-                    // Only update marker position, don't move the map
-                    carMarker.setLatLng(location);
-                } else {
-                    // Create marker with car icon
-                    const carIcon = L.divIcon({
-                        className: 'car-marker',
-                        html: '<div style="background: #1F8AFF; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
-                        iconSize: [20, 20],
-                        iconAnchor: [10, 10]
-                    });
-                    
-                    carMarker = L.marker(location, {icon: carIcon}).addTo(map);
-                    // Only center on first load, not on subsequent updates
-                    map.setView(location, 16);
-                }
-            }
-        }
-        
-        // Map initialization (doesn't require P2P)
-        // Note: loadCarStatus is called automatically when P2P connects
-        
-        // Also invalidate size when content becomes visible
-        const observer = new MutationObserver(() => {
-            if (map && document.getElementById('content').style.display !== 'none') {
-                setTimeout(() => {
-                    map.invalidateSize();
-                }, 50);
-            }
-        });
-        
-        observer.observe(document.getElementById('content'), {
-            attributes: true,
-            attributeFilter: ['style']
-        });
-        
-        // Window sliders
-        ['LF', 'RF', 'LR', 'RR'].forEach(win => {
-            const slider = document.getElementById('window' + win);
-            const valueSpan = document.getElementById('window' + win + 'Value');
-            let timeout = null;
-            
-            slider.addEventListener('input', (e) => {
-                valueSpan.textContent = e.target.value;
-                clearTimeout(timeout);
-                timeout = setTimeout(() => {
-                    sendCommand('setWindowToPercentage', {
-                        area: win === 'LF' ? 1 : win === 'RF' ? 2 : win === 'LR' ? 3 : 4,
-                        percent: parseInt(e.target.value)
-                    });
-                }, 500); // Debounce 500ms
-            });
-        });
-        
-        // AC Temperature segmented control
-        let currentAcTemp = 22;
-        function adjustAcTemp(delta) {
-            currentAcTemp = Math.max(16, Math.min(30, currentAcTemp + delta));
-            document.getElementById('acTempValue').textContent = currentAcTemp + '°C';
-            sendCommand('setAcTemperature', {
-                temperature: currentAcTemp,
-                zone: 0
-            });
-        }
-        
-        // AC Fan Level segmented control
-        let currentAcFan = 4;
-        function adjustAcFan(delta) {
-            currentAcFan = Math.max(1, Math.min(7, currentAcFan + delta));
-            document.getElementById('acFanValue').textContent = currentAcFan;
-            sendCommand('setAcFanLevel', {
-                level: currentAcFan
-            });
-        }
-        
-        // Volume segmented control
-        let currentVolume = 20;
-        function adjustVolume(delta) {
-            currentVolume = Math.max(0, Math.min(39, currentVolume + delta));
-            document.getElementById('volumeValue').textContent = currentVolume;
-            sendCommand('setMediaVolume', {
-                level: currentVolume
-            });
-        }
-        
-        async function loadCarStatus() {
-            try {
-                const response = await fetch(API_BASE + '/api/car/status', {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json'
-                    }
-                });
-                if (!response.ok) {
-                    throw new Error('HTTP ' + response.status + ': ' + response.statusText);
-                }
-                
-                const data = await response.json();
-                
-                // Update status
-                document.getElementById('speedValue').textContent = 
-                    (data.speed != null ? data.speed.toFixed(1) : '--') + ' km/h';
-                document.getElementById('socValue').textContent = 
-                    (data.soc != null ? data.soc : '--') + '%';
-                document.getElementById('evRangeValue').textContent = 
-                    (data.evRange != null ? data.evRange : '--') + ' km';
-                document.getElementById('totalMileageValue').textContent = 
-                    (data.mileage?.total != null ? data.mileage.total : '--') + ' km';
-                
-                // Update windows
-                if (data.windows) {
-                    document.getElementById('windowLF').value = data.windows.lf || 0;
-                    document.getElementById('windowLFValue').textContent = data.windows.lf || 0;
-                    document.getElementById('windowRF').value = data.windows.rf || 0;
-                    document.getElementById('windowRFValue').textContent = data.windows.rf || 0;
-                    document.getElementById('windowLR').value = data.windows.lr || 0;
-                    document.getElementById('windowLRValue').textContent = data.windows.lr || 0;
-                    document.getElementById('windowRR').value = data.windows.rr || 0;
-                    document.getElementById('windowRRValue').textContent = data.windows.rr || 0;
-                }
-                
-                // Update AC
-                if (data.ac) {
-                    currentAcTemp = data.ac.temp || 22;
-                    document.getElementById('acTempValue').textContent = currentAcTemp + '°C';
-                    
-                    if (data.ac.fan != null) {
-                        currentAcFan = data.ac.fan;
-                        document.getElementById('acFanValue').textContent = currentAcFan;
-                    }
-                }
-                
-                // Update volume
-                if (data.mediaVolume != null) {
-                    currentVolume = data.mediaVolume;
-                    document.getElementById('volumeValue').textContent = currentVolume;
-                }
-                
-                // Update map location
-                if (data.location && data.location.lat != null && data.location.lng != null) {
-                    updateMapLocation(data.location.lat, data.location.lng);
-                    // Enable center button when location is available
-                    document.getElementById('centerCarButton').disabled = false;
-                } else {
-                    document.getElementById('centerCarButton').disabled = true;
-                }
-                
-                // Update connection bar to green
-                document.getElementById('connectionBar').classList.add('connected');
-                document.getElementById('errorMessage').style.display = 'none';
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('content').style.display = 'block';
-                
-                // Invalidate map size when content becomes visible
-                if (map) {
-                    setTimeout(() => {
-                        map.invalidateSize();
-                    }, 100);
-                }
-                
-            } catch (error) {
-                console.error('Error loading status:', error);
-                // Update connection bar to red (no error message shown)
-                document.getElementById('connectionBar').classList.remove('connected');
-                document.getElementById('errorMessage').style.display = 'none';
-                document.getElementById('loading').style.display = 'none';
-                // Still show content even if API fails, so user can see the interface
-                document.getElementById('content').style.display = 'block';
-                document.getElementById('centerCarButton').disabled = true;
-            }
-        }
-        
-        async function sendCommand(command, params) {
-            // Check if car is connected before sending commands
+        // Connection status
+        function updateConnectionStatus(connected) {
             const connectionBar = document.getElementById('connectionBar');
-            const isConnected = connectionBar && connectionBar.classList.contains('connected');
+            if (connected) {
+                connectionBar.className = 'connection-bar connected';
+            } else {
+                connectionBar.className = 'connection-bar';
+            }
+        }
+        
+        // Error display
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
             
-            if (!isConnected) {
-                showError('Car is off. Controls are disabled.');
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Send command via P2P or HTTP
+        async function sendCommand(action, params = {}) {
+            if (!connectionInfo) {
+                showError('Not connected to car');
                 return;
             }
             
-            try {
-                const response = await fetch(API_BASE + '/api/car/command', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({command, params})
-                });
-                
-                const result = await response.json();
-                if (!result.success) {
-                    alert('Command failed: ' + (result.error || 'Unknown error'));
+            if (useP2P && dataChannel && dataChannel.readyState === 'open') {
+                // Send via P2P data channel
+                return sendP2PRequest('POST', `/api/actions/${action}`, params);
+            } else {
+                // Send via HTTP
+                try {
+                    const response = await fetch(`${connectionInfo.tunnelUrl}/api/actions/${action}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Device-Token': connectionInfo.deviceToken
+                        },
+                        body: JSON.stringify(params)
+                    });
+                    return await response.json();
+                } catch (error) {
+                    console.error('Command error:', error);
+                    showError('Failed to send command: ' + error.message);
                 }
-            } catch (error) {
-                console.error('Error sending command:', error);
-                alert('Failed to send command: ' + error.message);
             }
         }
         
-        // Initial load
-        // loadCarStatus() is called automatically when P2P connects
-        // Auto-refresh is started in setupDataChannel when P2P opens
+        function sendP2PRequest(method, url, body = null) {
+            return new Promise((resolve, reject) => {
+                if (!dataChannel || dataChannel.readyState !== 'open') {
+                    reject(new Error('P2P connection not established'));
+                    return;
+                }
+                
+                const requestId = ++requestIdCounter;
+                
+                const request = {
+                    requestId,
+                    method,
+                    url,
+                    body: body ? JSON.stringify(body) : null
+                };
+                
+                pendingRequests.set(requestId, { resolve, reject });
+                
+                // Timeout after 10 seconds
+                setTimeout(() => {
+                    if (pendingRequests.has(requestId)) {
+                        pendingRequests.delete(requestId);
+                        reject(new Error('Request timeout'));
+                    }
+                }, 10000);
+                
+                dataChannel.send(JSON.stringify(request));
+            });
+        }
         
-        // PWA install prompt
-        let deferredPrompt;
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
+        // Map initialization
+        function initMap() {
+            if (map) return;
+            
+            map = L.map('map').setView([0, 0], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+        }
+        
+        function updateCarLocation(lat, lon) {
+            if (!map) return;
+            
+            const position = [lat, lon];
+            
+            if (carMarker) {
+                carMarker.setLatLng(position);
+            } else {
+                carMarker = L.marker(position).addTo(map);
+                map.setView(position, 15);
+            }
+            
+            document.getElementById('centerCarButton').disabled = false;
+        }
+        
+        function centerOnCar() {
+            if (carMarker && map) {
+                map.setView(carMarker.getLatLng(), 15);
+            }
+        }
+        
+        // Data updates
+        function startDataUpdates() {
+            // Initial update
+            fetchStatus();
+            
+            // Update every 2 seconds
+            updateInterval = setInterval(fetchStatus, 2000);
+        }
+        
+        async function fetchStatus() {
+            if (!connectionInfo) return;
+            
+            try {
+                let data;
+                
+                if (useP2P && dataChannel && dataChannel.readyState === 'open') {
+                    data = await sendP2PRequest('GET', '/api/status');
+                } else {
+                    const response = await fetch(`${connectionInfo.tunnelUrl}/api/status`, {
+                        headers: {
+                            'X-Device-Token': connectionInfo.deviceToken
+                        }
+                    });
+                    data = await response.json();
+                }
+                
+                updateUI(data);
+            } catch (error) {
+                console.warn('Status fetch error:', error);
+            }
+        }
+        
+        function updateUI(data) {
+            if (!data) return;
+            
+            // Update status cards
+            if (data.speed !== undefined) {
+                document.getElementById('speedValue').textContent = Math.round(data.speed) + ' km/h';
+            }
+            if (data.soc !== undefined) {
+                document.getElementById('socValue').textContent = Math.round(data.soc) + '%';
+            }
+            if (data.evRange !== undefined) {
+                document.getElementById('evRangeValue').textContent = Math.round(data.evRange) + ' km';
+            }
+            if (data.totalMileage !== undefined) {
+                document.getElementById('totalMileageValue').textContent = Math.round(data.totalMileage) + ' km';
+            }
+            
+            // Update location
+            if (data.latitude && data.longitude) {
+                updateCarLocation(data.latitude, data.longitude);
+            }
+            
+            // Update AC temp
+            if (data.acTemp !== undefined) {
+                document.getElementById('acTempDisplay').textContent = data.acTemp + '°C';
+            }
+        }
+        
+        // AC temperature control
+        let currentAcTemp = 22;
+        
+        function adjustAcTemp(delta) {
+            currentAcTemp = Math.min(30, Math.max(16, currentAcTemp + delta));
+            document.getElementById('acTempDisplay').textContent = currentAcTemp + '°C';
+            sendCommand('setAcTemp', { temperature: currentAcTemp });
+        }
+        
+        // Window slider handlers
+        document.addEventListener('DOMContentLoaded', () => {
+            ['LF', 'RF', 'LR', 'RR'].forEach(window => {
+                const slider = document.getElementById('window' + window);
+                const valueDisplay = document.getElementById('window' + window + 'Value');
+                
+                if (slider) {
+                    slider.addEventListener('input', () => {
+                        valueDisplay.textContent = slider.value;
+                    });
+                    
+                    slider.addEventListener('change', () => {
+                        sendCommand('setWindowPosition', {
+                            window: window,
+                            position: parseInt(slider.value)
+                        });
+                    });
+                }
+            });
         });
     </script>
 </body>
