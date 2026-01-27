@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1F8AFF">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Commander Companion">
+    <title>Commander Companion</title>
+    <link rel="manifest" href="/app/manifest.json">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- QR Code Scanner Library -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html {
+            background: #111b23;
+            overscroll-behavior: none;
+            -webkit-overflow-scrolling: touch;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #111b23;
+            color: #F1F3F6;
+            padding: 16px;
+            padding-top: 20px;
+            padding-bottom: 80px;
+            overflow-x: hidden;
+            overscroll-behavior: none;
+            min-height: 100vh;
+        }
+        .connection-bar {
+            width: 100%;
+            height: 6px;
+            background: #f44336;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1000;
+            transition: background 0.3s;
+        }
+        .connection-bar.connected {
+            background: #36C36A;
+        }
+        .map-container {
+            width: 100%;
+            aspect-ratio: 1;
+            margin-bottom: 16px;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #18273c;
+            position: relative;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        .map-center-button {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            z-index: 1000;
+            background: #111b23;
+            color: white;
+            border: none;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            font-size: 20px;
+            transition: background 0.2s;
+            padding: 0;
+            overflow: hidden;
+        }
+        .map-center-button img {
+            width: 28px;
+            height: 28px;
+            object-fit: contain;
+            filter: brightness(0) invert(1);
+            mix-blend-mode: normal;
+        }
+        .map-center-button:active {
+            background: #0d1419;
+        }
+        .map-center-button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .map-center-button:disabled img {
+            opacity: 0.5;
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .status-card {
+            background: #18273c;
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+        .status-label {
+            font-size: 12px;
+            color: #9AA3AF;
+            margin-bottom: 8px;
+        }
+        .status-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1F8AFF;
+        }
+        .control-section {
+            background: #18273c;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 16px;
+            color: #F1F3F6;
+        }
+        .window-control {
+            margin-bottom: 16px;
+        }
+        .window-label {
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: #F1F3F6;
+        }
+        .slider {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: #2F3540;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #1F8AFF;
+            cursor: pointer;
+        }
+        .slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #1F8AFF;
+            cursor: pointer;
+            border: none;
+        }
+        .button-group {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+        }
+        button {
+            background: #1F8AFF;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:active {
+            background: #1a6fd9;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .loading {
+            text-align: center;
+            color: #9AA3AF;
+            padding: 20px;
+        }
+        .error {
+            background: #c62828;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        .segmented-control {
+            display: flex;
+            width: 100%;
+            height: 48px;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 16px;
+        }
+        .segmented-control button {
+            border: none;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .segmented-control button:active {
+            opacity: 0.7;
+        }
+        .segmented-control .decrement-btn {
+            background: #1F8AFF;
+            color: white;
+            flex: 0 0 60px;
+            border-radius: 8px 0 0 8px;
+        }
+        .segmented-control .value-display {
+            background: white;
+            color: #1F8AFF;
+            flex: 1;
+            font-size: 18px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-left: none;
+            border-right: none;
+        }
+        .segmented-control .increment-btn {
+            background: #0d5aa7;
+            color: white;
+            flex: 0 0 60px;
+            border-radius: 0 8px 8px 0;
+        }
+        .segmented-control-label {
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: #F1F3F6;
+        }
+        
+        /* QR Scanner Screen */
+        .scan-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            text-align: center;
+        }
+        .scan-title {
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #F1F3F6;
+        }
+        .scan-subtitle {
+            font-size: 16px;
+            color: #9AA3AF;
+            margin-bottom: 32px;
+            max-width: 300px;
+        }
+        .scan-button {
+            background: #1F8AFF;
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .scan-button:hover {
+            background: #1a6fd9;
+        }
+        .scan-button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .scan-icon {
+            width: 24px;
+            height: 24px;
+        }
+        
+        /* QR Scanner Modal */
+        .scanner-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #111b23;
+            z-index: 2000;
+            flex-direction: column;
+        }
+        .scanner-modal.active {
+            display: flex;
+        }
+        .scanner-header {
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .scanner-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #F1F3F6;
+        }
+        .close-button {
+            background: transparent;
+            border: none;
+            color: #F1F3F6;
+            font-size: 28px;
+            cursor: pointer;
+            padding: 8px;
+        }
+        #qr-reader {
+            flex: 1;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        #qr-reader video {
+            border-radius: 12px;
+        }
+        .scanner-instructions {
+            padding: 16px;
+            text-align: center;
+            color: #9AA3AF;
+            font-size: 14px;
+        }
+        
+        /* Connected device info */
+        .device-info {
+            background: #18273c;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .device-name {
+            font-size: 16px;
+            font-weight: bold;
+            color: #F1F3F6;
+        }
+        .device-status {
+            font-size: 14px;
+            color: #9AA3AF;
+        }
+        .disconnect-button {
+            background: #c62828;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        
+        .user-info {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #9AA3AF;
+        }
+    </style>
+</head>
+<body>
+    <div id="connectionBar" class="connection-bar"></div>
+    
+    <!-- QR Scan Screen -->
+    <div id="scanScreen" class="scan-container">
+        <div class="scan-title">Commander Companion</div>
+        <div class="scan-subtitle">Scan the QR code on your car's Commander app to connect</div>
+        <button id="scanButton" class="scan-button" onclick="openScanner()">
+            <svg class="scan-icon" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 5v4h2V5h4V3H5a2 2 0 0 0-2 2zm2 10H3v4a2 2 0 0 0 2 2h4v-2H5v-4zm14 4h-4v2h4a2 2 0 0 0 2-2v-4h-2v4zm0-14h-4v2h4v4h2V5a2 2 0 0 0-2-2z"/>
+                <path d="M7 7h4v4H7zm0 6h4v4H7zm6-6h4v4h-4zm0 6h4v4h-4z"/>
+            </svg>
+            Scan QR Code
+        </button>
+        <div id="scanStatus" class="user-info" style="display: none;"></div>
+    </div>
+    
+    <!-- QR Scanner Modal -->
+    <div id="scannerModal" class="scanner-modal">
+        <div class="scanner-header">
+            <span class="scanner-title">Scan QR Code</span>
+            <button class="close-button" onclick="closeScanner()">&times;</button>
+        </div>
+        <div id="qr-reader"></div>
+        <div class="scanner-instructions">
+            Point your camera at the QR code shown on the Commander app's Web Remote Control settings
+        </div>
+    </div>
+    
+    <div id="errorMessage" class="error" style="display: none;"></div>
+    
+    <div id="loading" class="loading" style="display: none;">Connecting to your car...</div>
+    
+    <div id="content" style="display: none;">
+        <!-- Connected Device Info -->
+        <div id="deviceInfo" class="device-info">
+            <div>
+                <div id="deviceName" class="device-name">Connected Car</div>
+                <div id="deviceStatus" class="device-status">Connected</div>
+            </div>
+            <button class="disconnect-button" onclick="disconnectDevice()">Disconnect</button>
+        </div>
+        
+        <!-- Debug Info (hidden in production) -->
+        <div id="debugInfo" class="control-section" style="display: none; background: #2a1a1a; margin-bottom: 16px;">
+            <div class="section-title" style="color: #ff6b6b;">Debug Panel</div>
+            <div id="debugLog" style="font-family: monospace; font-size: 11px; color: #aaa; max-height: 100px; overflow-y: auto; margin-bottom: 8px;"></div>
+            <button onclick="testDataChannel()" style="width: 100%;">Test Data Channel</button>
+        </div>
+        
+        <!-- Map -->
+        <div class="map-container">
+            <div id="map"></div>
+            <button class="map-center-button" id="centerCarButton" onclick="centerOnCar()" title="Center on car location" disabled>
+                <img src="/app/car-location-icon.png" alt="Car location" />
+            </button>
+        </div>
+        <!-- Status Cards -->
+        <div class="status-grid">
+            <div class="status-card">
+                <div class="status-label">Speed</div>
+                <div class="status-value" id="speedValue">--</div>
+            </div>
+            <div class="status-card">
+                <div class="status-label">Battery</div>
+                <div class="status-value" id="socValue">--%</div>
+            </div>
+            <div class="status-card">
+                <div class="status-label">EV Range</div>
+                <div class="status-value" id="evRangeValue">-- km</div>
+            </div>
+            <div class="status-card">
+                <div class="status-label">Total Mileage</div>
+                <div class="status-value" id="totalMileageValue">-- km</div>
+            </div>
+        </div>
+        
+        <!-- Window Controls -->
+        <div class="control-section">
+            <div class="section-title">Windows</div>
+            <div class="window-control">
+                <div class="window-label">Left Front: <span id="windowLFValue">0</span>%</div>
+                <input type="range" class="slider" id="windowLF" min="0" max="100" value="0">
+            </div>
+            <div class="window-control">
+                <div class="window-label">Right Front: <span id="windowRFValue">0</span>%</div>
+                <input type="range" class="slider" id="windowRF" min="0" max="100" value="0">
+            </div>
+            <div class="window-control">
+                <div class="window-label">Left Rear: <span id="windowLRValue">0</span>%</div>
+                <input type="range" class="slider" id="windowLR" min="0" max="100" value="0">
+            </div>
+            <div class="window-control">
+                <div class="window-label">Right Rear: <span id="windowRRValue">0</span>%</div>
+                <input type="range" class="slider" id="windowRR" min="0" max="100" value="0">
+            </div>
+        </div>
+        
+        <!-- Quick Controls -->
+        <div class="control-section">
+            <div class="section-title">Quick Controls</div>
+            <div class="button-group">
+                <button onclick="sendCommand('setTrunkState', {state: 'open'})">Open Trunk</button>
+                <button onclick="sendCommand('setTrunkState', {state: 'close'})">Close Trunk</button>
+                <button onclick="sendCommand('setReadingLight', {enabled: true})">Reading Light On</button>
+                <button onclick="sendCommand('setReadingLight', {enabled: false})">Reading Light Off</button>
+            </div>
+        </div>
+        
+        <!-- AC Control -->
+        <div class="control-section">
+            <div class="section-title">AC Control</div>
+            <div class="segmented-control-label">Temperature</div>
+            <div class="segmented-control">
+                <button class="decrement-btn" onclick="adjustAcTemp(-1)">−</button>
+                <span class="value-display" id="acTempDisplay">22°C</span>
+                <button class="increment-btn" onclick="adjustAcTemp(1)">+</button>
+            </div>
+            <div class="button-group">
+                <button onclick="sendCommand('setAcState', {enabled: true})">AC On</button>
+                <button onclick="sendCommand('setAcState', {enabled: false})">AC Off</button>
+            </div>
+        </div>
+        
+        <!-- Seat Memory -->
+        <div class="control-section">
+            <div class="section-title">Seat Memory</div>
+            <div class="button-group">
+                <button onclick="sendCommand('setSeatMemory', {position: 1})">Position 1</button>
+                <button onclick="sendCommand('setSeatMemory', {position: 2})">Position 2</button>
+                <button onclick="sendCommand('setSeatMemory', {position: 3})">Position 3</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Cloudflare signaling server
+        const SIGNALING_SERVER = 'https://api.bydcommander.win';
+        
+        // Connection info from QR code
+        let connectionInfo = null;
+        let html5QrCode = null;
+        
+        // WebRTC P2P Connection
+        let peerConnection = null;
+        let dataChannel = null;
+        let useP2P = false;
+        let pendingRequests = new Map();
+        let requestIdCounter = 0;
+        let signalingPollInterval = null;
+        
+        // Map
+        let map = null;
+        let carMarker = null;
+        let updateInterval = null;
+        
+        // STUN/TURN servers for NAT traversal - Metered.ca configuration
+        const rtcConfig = {
+            iceServers: [
+                { urls: "stun:stun.relay.metered.ca:80" },
+                { urls: "turn:global.relay.metered.ca:80", username: "59300173e16020ec8eb46bc6", credential: "JkXmsWLaInmBZ3YB" },
+                { urls: "turn:global.relay.metered.ca:80?transport=tcp", username: "59300173e16020ec8eb46bc6", credential: "JkXmsWLaInmBZ3YB" },
+                { urls: "turn:global.relay.metered.ca:443", username: "59300173e16020ec8eb46bc6", credential: "JkXmsWLaInmBZ3YB" },
+                { urls: "turns:global.relay.metered.ca:443?transport=tcp", username: "59300173e16020ec8eb46bc6", credential: "JkXmsWLaInmBZ3YB" },
+            ],
+        };
+        
+        // LocalStorage key for cached connection
+        const STORAGE_KEY = 'companion_connection';
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Companion app loaded');
+            console.log('Signaling server:', SIGNALING_SERVER);
+            
+            // Check for cached connection
+            const cached = localStorage.getItem(STORAGE_KEY);
+            if (cached) {
+                try {
+                    connectionInfo = JSON.parse(cached);
+                    console.log('Found cached connection:', connectionInfo.deviceName || 'Unknown device');
+                    
+                    // Show connecting status
+                    document.getElementById('scanScreen').style.display = 'none';
+                    document.getElementById('loading').style.display = 'block';
+                    document.getElementById('loading').textContent = 'Reconnecting to ' + (connectionInfo.deviceName || 'your car') + '...';
+                    
+                    // Try to connect
+                    connectToDevice();
+                } catch (e) {
+                    console.error('Error parsing cached connection:', e);
+                    localStorage.removeItem(STORAGE_KEY);
+                    showScanScreen();
+                }
+            } else {
+                showScanScreen();
+            }
+        });
+        
+        function showScanScreen() {
+            document.getElementById('scanScreen').style.display = 'flex';
+            document.getElementById('content').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+            updateConnectionStatus(false);
+        }
+        
+        function showAppScreen() {
+            document.getElementById('scanScreen').style.display = 'none';
+            document.getElementById('content').style.display = 'block';
+            document.getElementById('loading').style.display = 'none';
+            
+            // Update device info
+            if (connectionInfo) {
+                document.getElementById('deviceName').textContent = connectionInfo.deviceName || 'Connected Car';
+                document.getElementById('deviceStatus').textContent = useP2P ? 'Connected via P2P' : 'Connecting...';
+            }
+            
+            // Initialize map
+            initMap();
+            
+            // Start data updates
+            startDataUpdates();
+        }
+        
+        // QR Scanner Functions
+        function openScanner() {
+            const modal = document.getElementById('scannerModal');
+            modal.classList.add('active');
+            
+            html5QrCode = new Html5Qrcode("qr-reader");
+            
+            html5QrCode.start(
+                { facingMode: "environment" },
+                {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 }
+                },
+                onScanSuccess,
+                onScanFailure
+            ).catch((err) => {
+                console.error('Error starting scanner:', err);
+                showError('Failed to start camera. Please allow camera access.');
+                closeScanner();
+            });
+        }
+        
+        function closeScanner() {
+            const modal = document.getElementById('scannerModal');
+            modal.classList.remove('active');
+            
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
+                    html5QrCode = null;
+                }).catch((err) => {
+                    console.warn('Error stopping scanner:', err);
+                });
+            }
+        }
+        
+        function onScanSuccess(decodedText) {
+            console.log('QR Code scanned:', decodedText);
+            closeScanner();
+            
+            try {
+                // Parse QR code data
+                // Expected format: JSON with {userId, deviceToken, deviceName}
+                const data = JSON.parse(decodedText);
+                
+                if (!data.userId || !data.deviceToken) {
+                    throw new Error('Invalid QR code format');
+                }
+                
+                connectionInfo = {
+                    userId: data.userId,
+                    deviceToken: data.deviceToken,
+                    deviceName: data.deviceName || 'BYD Car',
+                    timestamp: Date.now()
+                };
+                
+                // Cache the connection
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(connectionInfo));
+                console.log('Connection info saved:', connectionInfo.deviceName);
+                
+                // Show connecting status
+                document.getElementById('scanScreen').style.display = 'none';
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('loading').textContent = 'Connecting to ' + connectionInfo.deviceName + '...';
+                
+                // Connect to device
+                connectToDevice();
+                
+            } catch (e) {
+                console.error('Error parsing QR code:', e);
+                showError('Invalid QR code. Please scan the QR code from Commander app settings.');
+            }
+        }
+        
+        function onScanFailure(error) {
+            // Ignore continuous scan failures - only log occasionally
+        }
+        
+        // Connection Functions
+        async function connectToDevice() {
+            if (!connectionInfo || !connectionInfo.userId) {
+                showError('No connection info available');
+                showScanScreen();
+                return;
+            }
+            
+            try {
+                console.log('Starting WebRTC connection for user:', connectionInfo.userId);
+                
+                // Initialize WebRTC P2P connection using Cloudflare signaling
+                await initP2P();
+                
+            } catch (error) {
+                console.error('Connection error:', error);
+                showError('Connection failed: ' + error.message);
+                
+                // Show app screen anyway with offline status
+                updateConnectionStatus(false);
+                document.getElementById('deviceStatus').textContent = 'Car offline';
+                showAppScreen();
+            }
+        }
+        
+        function getDeviceName() {
+            // Try to get a meaningful device name
+            const ua = navigator.userAgent;
+            if (/iPhone/.test(ua)) return 'iPhone';
+            if (/iPad/.test(ua)) return 'iPad';
+            if (/Android/.test(ua)) {
+                const match = ua.match(/Android[^;]+;\s*([^)]+)/);
+                return match ? match[1].split(' Build')[0] : 'Android Device';
+            }
+            if (/Mac/.test(ua)) return 'Mac';
+            if (/Windows/.test(ua)) return 'Windows PC';
+            return 'Web Browser';
+        }
+        
+        // WebRTC P2P Connection using Cloudflare signaling
+        async function initP2P() {
+            try {
+                console.log('Initializing P2P connection with Cloudflare signaling...');
+                
+                createPeerConnection();
+                
+                // Create data channel
+                dataChannel = peerConnection.createDataChannel('http-tunnel', {
+                    ordered: true
+                });
+                setupDataChannel(dataChannel);
+                
+                // Create offer
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                
+                const offerUrl = `${SIGNALING_SERVER}/signaling/${connectionInfo.userId}/offer`;
+                console.log('Sending offer to:', offerUrl);
+                console.log('UserId:', connectionInfo.userId);
+                console.log('DeviceToken:', connectionInfo.deviceToken);
+                
+                // Send offer via Cloudflare signaling
+                const offerBody = {
+                    offer: {
+                        type: offer.type,
+                        sdp: offer.sdp
+                    },
+                    deviceToken: connectionInfo.deviceToken,
+                    deviceName: getDeviceName()
+                };
+                
+                const offerResponse = await fetch(offerUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Device-Token': connectionInfo.deviceToken
+                    },
+                    body: JSON.stringify(offerBody)
+                });
+                
+                console.log('Offer response status:', offerResponse.status);
+                const offerResult = await offerResponse.text();
+                console.log('Offer response:', offerResult);
+                
+                if (!offerResponse.ok) {
+                    throw new Error('Failed to send offer: ' + offerResult);
+                }
+                
+                console.log('Offer sent successfully! Now waiting for car to respond...');
+                
+                // Show app screen while waiting for connection
+                showAppScreen();
+                
+                // Poll for answer
+                startSignalingPoll();
+                
+            } catch (error) {
+                console.error('P2P initialization error:', error);
+                updateConnectionStatus(false);
+                showError('Failed to initialize P2P connection: ' + error.message);
+                showAppScreen();
+            }
+        }
+        
+        function createPeerConnection() {
+            peerConnection = new RTCPeerConnection(rtcConfig);
+            
+            // Handle ICE candidates
+            peerConnection.onicecandidate = async (event) => {
+                if (event.candidate && connectionInfo) {
+                    console.log('Sending ICE candidate...');
+                    try {
+                        await fetch(`${SIGNALING_SERVER}/signaling/${connectionInfo.userId}/ice/web`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Device-Token': connectionInfo.deviceToken
+                            },
+                            body: JSON.stringify({
+                                candidate: event.candidate.candidate,
+                                sdpMLineIndex: event.candidate.sdpMLineIndex,
+                                sdpMid: event.candidate.sdpMid
+                            })
+                        });
+                    } catch (err) {
+                        console.error('Error sending ICE candidate:', err);
+                    }
+                }
+            };
+            
+            // Handle connection state changes
+            peerConnection.onconnectionstatechange = () => {
+                console.log('Peer connection state:', peerConnection.connectionState);
+                if (peerConnection.connectionState === 'connected') {
+                    updateConnectionStatus(true);
+                    document.getElementById('deviceStatus').textContent = 'Connected via P2P';
+                    stopSignalingPoll();
+                } else if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
+                    updateConnectionStatus(false);
+                    document.getElementById('deviceStatus').textContent = 'Disconnected';
+                    // Try to reconnect
+                    setTimeout(() => {
+                        if (!useP2P && connectionInfo) {
+                            console.log('Attempting to reconnect...');
+                            initP2P();
+                        }
+                    }, 5000);
+                }
+            };
+            
+            // Handle incoming data channel
+            peerConnection.ondatachannel = (event) => {
+                const channel = event.channel;
+                setupDataChannel(channel);
+            };
+        }
+        
+        function setupDataChannel(channel) {
+            channel.onopen = () => {
+                console.log('Data channel opened');
+                debugLog(`Data channel OPENED (label: ${channel.label})`);
+                useP2P = true;
+                updateConnectionStatus(true);
+                document.getElementById('deviceStatus').textContent = 'Connected via P2P';
+                
+                // Auto-fetch status on connection
+                setTimeout(() => {
+                    debugLog('Auto-fetching initial status...');
+                    fetchStatus();
+                }, 500);
+            };
+            
+            channel.onclose = () => {
+                console.log('Data channel closed');
+                debugLog('Data channel CLOSED');
+                useP2P = false;
+                updateConnectionStatus(false);
+                document.getElementById('deviceStatus').textContent = 'Disconnected';
+            };
+            
+            channel.onerror = (error) => {
+                console.error('Data channel error:', error);
+                const errMsg = error?.error?.message || error?.message || JSON.stringify(error);
+                debugLog(`Data channel ERROR: ${errMsg}`);
+            };
+            
+            channel.onmessage = (event) => {
+                try {
+                    console.log('Data channel received message:', event.data.substring(0, 200));
+                    const response = JSON.parse(event.data);
+                    console.log('Parsed response, requestId:', response.requestId, 'status:', response.status);
+                    
+                    // Handle response to pending request
+                    if (response.requestId && pendingRequests.has(response.requestId)) {
+                        console.log('Found pending request for requestId:', response.requestId);
+                        const { resolve, reject } = pendingRequests.get(response.requestId);
+                        pendingRequests.delete(response.requestId);
+                        
+                        if (response.error) {
+                            console.error('Response contains error:', response.error);
+                            reject(new Error(response.error));
+                        } else {
+                            console.log('Resolving request with body:', JSON.stringify(response.body).substring(0, 100));
+                            resolve(response);
+                        }
+                    } else {
+                        console.warn('No pending request for requestId:', response.requestId, 'Pending:', Array.from(pendingRequests.keys()));
+                    }
+                } catch (e) {
+                    console.error('Error parsing data channel message:', e, 'Raw data:', event.data.substring(0, 200));
+                }
+            };
+            
+            dataChannel = channel;
+        }
+        
+        function startSignalingPoll() {
+            if (signalingPollInterval) {
+                clearInterval(signalingPollInterval);
+            }
+            
+            let pollCount = 0;
+            const maxPolls = 90; // 90 seconds timeout (longer for car startup)
+            let receivedAnswer = false;
+            
+            // Update status to show we're waiting
+            document.getElementById('deviceStatus').textContent = 'Waiting for car...';
+            
+            signalingPollInterval = setInterval(async () => {
+                pollCount++;
+                
+                // Update status with countdown
+                if (!receivedAnswer) {
+                    const remaining = maxPolls - pollCount;
+                    document.getElementById('deviceStatus').textContent = `Waiting for car... (${remaining}s)`;
+                }
+                
+                if (pollCount > maxPolls) {
+                    console.error('Signaling timeout - car did not respond');
+                    stopSignalingPoll();
+                    showError('Connection timeout. Make sure the car is on and Commander app is running with web control enabled.');
+                    document.getElementById('deviceStatus').textContent = 'Car offline';
+                    return;
+                }
+                
+                try {
+                    // Poll for answer
+                    const answerUrl = `${SIGNALING_SERVER}/signaling/${connectionInfo.userId}/answer`;
+                    console.log(`Poll ${pollCount}: Checking for answer at ${answerUrl}`);
+                    
+                    const answerResponse = await fetch(answerUrl, {
+                        headers: {
+                            'X-Device-Token': connectionInfo.deviceToken
+                        }
+                    });
+                    
+                    console.log(`Answer response status: ${answerResponse.status}`);
+                    
+                    if (answerResponse.ok) {
+                        const data = await answerResponse.json();
+                        console.log('Answer response data:', JSON.stringify(data).substring(0, 200));
+                        
+                        // Handle answer
+                        if (data.answer && peerConnection && !peerConnection.remoteDescription) {
+                            console.log('Received answer from car! Setting remote description...');
+                            receivedAnswer = true;
+                            document.getElementById('deviceStatus').textContent = 'Establishing P2P...';
+                            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                            console.log('Remote description set successfully');
+                        }
+                    }
+                    
+                    // Poll for ICE candidates from car
+                    const iceResponse = await fetch(`${SIGNALING_SERVER}/signaling/${connectionInfo.userId}/ice/car`, {
+                        headers: {
+                            'X-Device-Token': connectionInfo.deviceToken
+                        }
+                    });
+                    
+                    if (iceResponse.ok) {
+                        const candidates = await iceResponse.json();
+                        
+                        if (Array.isArray(candidates) && candidates.length > 0) {
+                            console.log(`Received ${candidates.length} ICE candidate(s) from car`);
+                            for (const candidate of candidates) {
+                                if (candidate.candidate) {
+                                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                                }
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.warn('Signaling poll error:', err);
+                }
+            }, 1000);
+        }
+        
+        function stopSignalingPoll() {
+            if (signalingPollInterval) {
+                clearInterval(signalingPollInterval);
+                signalingPollInterval = null;
+            }
+        }
+        
+        // Disconnect device
+        function disconnectDevice() {
+            if (confirm('Disconnect from this car? You will need to scan the QR code again to reconnect.')) {
+                // Clean up P2P
+                if (dataChannel) {
+                    dataChannel.close();
+                    dataChannel = null;
+                }
+                if (peerConnection) {
+                    peerConnection.close();
+                    peerConnection = null;
+                }
+                useP2P = false;
+                
+                // Stop polling
+                stopSignalingPoll();
+                
+                // Stop updates
+                if (updateInterval) {
+                    clearInterval(updateInterval);
+                    updateInterval = null;
+                }
+                
+                // Clear cached connection
+                localStorage.removeItem(STORAGE_KEY);
+                connectionInfo = null;
+                
+                // Show scan screen
+                showScanScreen();
+            }
+        }
+        
+        // Debug logging
+        function debugLog(msg) {
+            console.log('[DEBUG]', msg);
+            const debugDiv = document.getElementById('debugLog');
+            if (debugDiv) {
+                const time = new Date().toLocaleTimeString();
+                debugDiv.innerHTML += `<div>${time}: ${msg}</div>`;
+                debugDiv.scrollTop = debugDiv.scrollHeight;
+            }
+        }
+        
+        // Test data channel
+        async function testDataChannel() {
+            debugLog('Testing data channel...');
+            debugLog(`useP2P: ${useP2P}`);
+            debugLog(`dataChannel: ${dataChannel ? 'exists' : 'null'}`);
+            debugLog(`dataChannel.readyState: ${dataChannel?.readyState}`);
+            
+            if (!dataChannel || dataChannel.readyState !== 'open') {
+                debugLog('ERROR: Data channel not open!');
+                showError('Data channel not open');
+                return;
+            }
+            
+            try {
+                debugLog('Sending test request...');
+                const startTime = Date.now();
+                const result = await sendP2PRequest('GET', '/api/car/status');
+                const elapsed = Date.now() - startTime;
+                debugLog(`SUCCESS in ${elapsed}ms! Status: ${result.status}`);
+                debugLog(`Body keys: ${Object.keys(result.body || {}).join(', ')}`);
+                
+                if (result.body) {
+                    updateUI(result.body);
+                    debugLog('UI updated!');
+                }
+            } catch (err) {
+                debugLog(`ERROR: ${err.message}`);
+                showError('Test failed: ' + err.message);
+            }
+        }
+        
+        // Connection status
+        function updateConnectionStatus(connected) {
+            const connectionBar = document.getElementById('connectionBar');
+            if (connected) {
+                connectionBar.className = 'connection-bar connected';
+                debugLog('Connection status: CONNECTED');
+            } else {
+                connectionBar.className = 'connection-bar';
+                debugLog('Connection status: DISCONNECTED');
+            }
+        }
+        
+        // Error display
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Send command via P2P
+        async function sendCommand(action, params = {}) {
+            if (!connectionInfo) {
+                showError('Not connected to car');
+                return;
+            }
+            
+            if (useP2P && dataChannel && dataChannel.readyState === 'open') {
+                // Send via P2P data channel
+                return sendP2PRequest('POST', `/api/actions/${action}`, params);
+            } else {
+                showError('Not connected to car. Please wait for P2P connection.');
+            }
+        }
+        
+        function sendP2PRequest(method, url, body = null) {
+            return new Promise((resolve, reject) => {
+                if (!dataChannel || dataChannel.readyState !== 'open') {
+                    console.error('P2P request failed: dataChannel state is', dataChannel?.readyState);
+                    reject(new Error('P2P connection not established'));
+                    return;
+                }
+                
+                const requestId = ++requestIdCounter;
+                
+                const request = {
+                    requestId,
+                    method,
+                    url,
+                    body: body ? JSON.stringify(body) : null
+                };
+                
+                console.log(`Sending P2P request #${requestId}: ${method} ${url}`);
+                
+                pendingRequests.set(requestId, { resolve, reject });
+                
+                // Timeout after 10 seconds
+                setTimeout(() => {
+                    if (pendingRequests.has(requestId)) {
+                        console.warn(`Request #${requestId} timed out`);
+                        pendingRequests.delete(requestId);
+                        reject(new Error('Request timeout'));
+                    }
+                }, 10000);
+                
+                dataChannel.send(JSON.stringify(request));
+                console.log(`Request #${requestId} sent`);
+            });
+        }
+        
+        // Map initialization
+        function initMap() {
+            if (map) return;
+            
+            map = L.map('map').setView([0, 0], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap'
+            }).addTo(map);
+        }
+        
+        function updateCarLocation(lat, lon) {
+            if (!map) return;
+            
+            const position = [lat, lon];
+            
+            if (carMarker) {
+                carMarker.setLatLng(position);
+            } else {
+                carMarker = L.marker(position).addTo(map);
+                map.setView(position, 15);
+            }
+            
+            document.getElementById('centerCarButton').disabled = false;
+        }
+        
+        function centerOnCar() {
+            if (carMarker && map) {
+                map.setView(carMarker.getLatLng(), 15);
+            }
+        }
+        
+        // Data updates
+        function startDataUpdates() {
+            // Initial update
+            fetchStatus();
+            
+            // Update every 2 seconds
+            updateInterval = setInterval(fetchStatus, 2000);
+        }
+        
+        async function fetchStatus() {
+            if (!connectionInfo) return;
+            if (!useP2P || !dataChannel || dataChannel.readyState !== 'open') return;
+            
+            try {
+                const data = await sendP2PRequest('GET', '/api/car/status');
+                if (data && data.body) {
+                    updateUI(data.body);
+                }
+            } catch (error) {
+                console.warn('Status fetch error:', error);
+            }
+        }
+        
+        function updateUI(data) {
+            if (!data) return;
+            
+            // Update status cards
+            if (data.speed !== undefined) {
+                document.getElementById('speedValue').textContent = Math.round(data.speed) + ' km/h';
+            }
+            if (data.soc !== undefined) {
+                document.getElementById('socValue').textContent = Math.round(data.soc) + '%';
+            }
+            if (data.evRange !== undefined) {
+                document.getElementById('evRangeValue').textContent = Math.round(data.evRange) + ' km';
+            }
+            if (data.mileage && data.mileage.total !== undefined) {
+                document.getElementById('totalMileageValue').textContent = Math.round(data.mileage.total) + ' km';
+            }
+            
+            // Update location
+            if (data.location && data.location.lat && data.location.lng) {
+                updateCarLocation(data.location.lat, data.location.lng);
+            }
+            
+            // Update AC temp
+            if (data.ac && data.ac.temp !== undefined) {
+                document.getElementById('acTempDisplay').textContent = data.ac.temp + '°C';
+                currentAcTemp = data.ac.temp;
+            }
+            
+            // Update windows
+            if (data.windows) {
+                if (data.windows.lf !== undefined) {
+                    document.getElementById('windowLF').value = data.windows.lf;
+                    document.getElementById('windowLFValue').textContent = data.windows.lf;
+                }
+                if (data.windows.rf !== undefined) {
+                    document.getElementById('windowRF').value = data.windows.rf;
+                    document.getElementById('windowRFValue').textContent = data.windows.rf;
+                }
+                if (data.windows.lr !== undefined) {
+                    document.getElementById('windowLR').value = data.windows.lr;
+                    document.getElementById('windowLRValue').textContent = data.windows.lr;
+                }
+                if (data.windows.rr !== undefined) {
+                    document.getElementById('windowRR').value = data.windows.rr;
+                    document.getElementById('windowRRValue').textContent = data.windows.rr;
+                }
+            }
+        }
+        
+        // AC temperature control
+        let currentAcTemp = 22;
+        
+        function adjustAcTemp(delta) {
+            currentAcTemp = Math.min(30, Math.max(16, currentAcTemp + delta));
+            document.getElementById('acTempDisplay').textContent = currentAcTemp + '°C';
+            sendCommand('setAcTemperature', { temperature: currentAcTemp });
+        }
+        
+        // Window slider handlers
+        ['LF', 'RF', 'LR', 'RR'].forEach(windowId => {
+            const slider = document.getElementById('window' + windowId);
+            const valueDisplay = document.getElementById('window' + windowId + 'Value');
+            
+            if (slider) {
+                slider.addEventListener('input', () => {
+                    valueDisplay.textContent = slider.value;
+                });
+                
+                slider.addEventListener('change', () => {
+                    const windowMap = { 'LF': 1, 'RF': 2, 'LR': 3, 'RR': 4 };
+                    sendCommand('setWindowToPercentage', {
+                        area: windowMap[windowId],
+                        percent: parseInt(slider.value)
+                    });
+                });
+            }
+        });
+    </script>
+</body>
+</html>
