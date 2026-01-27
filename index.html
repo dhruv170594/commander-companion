@@ -97,24 +97,12 @@
                 transform: translateY(10px);
             }
         }
-        .browser-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(30, 30, 30, 0.95);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            padding: 12px 16px;
-            padding-bottom: max(12px, env(safe-area-inset-bottom));
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-top: 1px solid #333;
-        }
         .browser-icon.share {
             opacity: 1;
             animation: pulse 2s ease-in-out infinite;
+        }
+        .element-with-space {
+            margin-bottom: 20px; /* Adds 20 pixels of space below the element */
         }
         @keyframes pulse {
             0%, 100% {
@@ -173,11 +161,8 @@
         <img src="/icon-192.png" alt="Commander Companion" class="logo">
         <h1 class="title">Commander Companion</h1>
         <p class="subtitle">Remote control for your BYD</p>
-        <style>
-          .element-with-space {
-            margin-bottom: 20px; /* Adds 20 pixels of space below the element */
-          }
-        </style>
+        
+        <div class="element-with-space"> </div>
         <div class="instruction-box">
             <p class="instruction-text">
                 Tap the
