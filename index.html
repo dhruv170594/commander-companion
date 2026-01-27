@@ -432,6 +432,13 @@
             <button class="disconnect-button" onclick="disconnectDevice()">Disconnect</button>
         </div>
         
+        <!-- Debug Info (remove in production) -->
+        <div id="debugInfo" class="control-section" style="background: #2a1a1a; margin-bottom: 16px;">
+            <div class="section-title" style="color: #ff6b6b;">Debug Panel</div>
+            <div id="debugLog" style="font-family: monospace; font-size: 11px; color: #aaa; max-height: 100px; overflow-y: auto; margin-bottom: 8px;"></div>
+            <button onclick="testDataChannel()" style="width: 100%;">Test Data Channel</button>
+        </div>
+        
         <!-- Map -->
         <div class="map-container">
             <div id="map"></div>
@@ -844,13 +851,21 @@
         function setupDataChannel(channel) {
             channel.onopen = () => {
                 console.log('Data channel opened');
+                debugLog(`Data channel OPENED (label: ${channel.label})`);
                 useP2P = true;
                 updateConnectionStatus(true);
                 document.getElementById('deviceStatus').textContent = 'Connected via P2P';
+                
+                // Auto-fetch status on connection
+                setTimeout(() => {
+                    debugLog('Auto-fetching initial status...');
+                    fetchStatus();
+                }, 500);
             };
             
             channel.onclose = () => {
                 console.log('Data channel closed');
+                debugLog('Data channel CLOSED');
                 useP2P = false;
                 updateConnectionStatus(false);
                 document.getElementById('deviceStatus').textContent = 'Disconnected';
@@ -858,25 +873,33 @@
             
             channel.onerror = (error) => {
                 console.error('Data channel error:', error);
+                debugLog(`Data channel ERROR: ${error}`);
             };
             
             channel.onmessage = (event) => {
                 try {
+                    console.log('Data channel received message:', event.data.substring(0, 200));
                     const response = JSON.parse(event.data);
+                    console.log('Parsed response, requestId:', response.requestId, 'status:', response.status);
                     
                     // Handle response to pending request
                     if (response.requestId && pendingRequests.has(response.requestId)) {
+                        console.log('Found pending request for requestId:', response.requestId);
                         const { resolve, reject } = pendingRequests.get(response.requestId);
                         pendingRequests.delete(response.requestId);
                         
                         if (response.error) {
+                            console.error('Response contains error:', response.error);
                             reject(new Error(response.error));
                         } else {
+                            console.log('Resolving request with body:', JSON.stringify(response.body).substring(0, 100));
                             resolve(response);
                         }
+                    } else {
+                        console.warn('No pending request for requestId:', response.requestId, 'Pending:', Array.from(pendingRequests.keys()));
                     }
                 } catch (e) {
-                    console.error('Error parsing data channel message:', e);
+                    console.error('Error parsing data channel message:', e, 'Raw data:', event.data.substring(0, 200));
                 }
             };
             
@@ -1003,13 +1026,57 @@
             }
         }
         
+        // Debug logging
+        function debugLog(msg) {
+            console.log('[DEBUG]', msg);
+            const debugDiv = document.getElementById('debugLog');
+            if (debugDiv) {
+                const time = new Date().toLocaleTimeString();
+                debugDiv.innerHTML += `<div>${time}: ${msg}</div>`;
+                debugDiv.scrollTop = debugDiv.scrollHeight;
+            }
+        }
+        
+        // Test data channel
+        async function testDataChannel() {
+            debugLog('Testing data channel...');
+            debugLog(`useP2P: ${useP2P}`);
+            debugLog(`dataChannel: ${dataChannel ? 'exists' : 'null'}`);
+            debugLog(`dataChannel.readyState: ${dataChannel?.readyState}`);
+            
+            if (!dataChannel || dataChannel.readyState !== 'open') {
+                debugLog('ERROR: Data channel not open!');
+                showError('Data channel not open');
+                return;
+            }
+            
+            try {
+                debugLog('Sending test request...');
+                const startTime = Date.now();
+                const result = await sendP2PRequest('GET', '/api/car/status');
+                const elapsed = Date.now() - startTime;
+                debugLog(`SUCCESS in ${elapsed}ms! Status: ${result.status}`);
+                debugLog(`Body keys: ${Object.keys(result.body || {}).join(', ')}`);
+                
+                if (result.body) {
+                    updateUI(result.body);
+                    debugLog('UI updated!');
+                }
+            } catch (err) {
+                debugLog(`ERROR: ${err.message}`);
+                showError('Test failed: ' + err.message);
+            }
+        }
+        
         // Connection status
         function updateConnectionStatus(connected) {
             const connectionBar = document.getElementById('connectionBar');
             if (connected) {
                 connectionBar.className = 'connection-bar connected';
+                debugLog('Connection status: CONNECTED');
             } else {
                 connectionBar.className = 'connection-bar';
+                debugLog('Connection status: DISCONNECTED');
             }
         }
         
@@ -1043,6 +1110,7 @@
         function sendP2PRequest(method, url, body = null) {
             return new Promise((resolve, reject) => {
                 if (!dataChannel || dataChannel.readyState !== 'open') {
+                    console.error('P2P request failed: dataChannel state is', dataChannel?.readyState);
                     reject(new Error('P2P connection not established'));
                     return;
                 }
@@ -1056,17 +1124,21 @@
                     body: body ? JSON.stringify(body) : null
                 };
                 
+                console.log(`Sending P2P request #${requestId}: ${method} ${url}`);
+                
                 pendingRequests.set(requestId, { resolve, reject });
                 
                 // Timeout after 10 seconds
                 setTimeout(() => {
                     if (pendingRequests.has(requestId)) {
+                        console.warn(`Request #${requestId} timed out`);
                         pendingRequests.delete(requestId);
                         reject(new Error('Request timeout'));
                     }
                 }, 10000);
                 
                 dataChannel.send(JSON.stringify(request));
+                console.log(`Request #${requestId} sent`);
             });
         }
         
