@@ -302,6 +302,99 @@
             width: 24px;
             height: 24px;
         }
+        .manual-entry-link {
+            background: none;
+            border: none;
+            color: #9AA3AF;
+            font-size: 14px;
+            margin-top: 16px;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .manual-entry-link:hover {
+            color: #1F8AFF;
+        }
+        
+        /* Manual Entry Modal */
+        #manualEntryModal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 3000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        #manualEntryModal.active {
+            display: flex;
+        }
+        .manual-modal-backdrop {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+        }
+        .manual-modal-content {
+            position: relative;
+            background: #18273c;
+            border-radius: 16px;
+            padding: 24px;
+            width: 90%;
+            max-width: 360px;
+            z-index: 1;
+        }
+        .manual-modal-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #F1F3F6;
+            margin-bottom: 8px;
+        }
+        .manual-modal-subtitle {
+            font-size: 14px;
+            color: #9AA3AF;
+            margin-bottom: 20px;
+        }
+        .manual-modal-input {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 8px;
+            border: 1px solid #2F3540;
+            background: #111b23;
+            color: #F1F3F6;
+            font-size: 14px;
+            font-family: monospace;
+            outline: none;
+            margin-bottom: 16px;
+        }
+        .manual-modal-input:focus {
+            border-color: #1F8AFF;
+        }
+        .manual-modal-buttons {
+            display: flex;
+            gap: 12px;
+        }
+        .manual-modal-buttons button {
+            flex: 1;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .manual-cancel-btn {
+            background: #2F3540;
+            color: #F1F3F6;
+            border: none;
+        }
+        .manual-connect-btn {
+            background: #1F8AFF;
+            color: white;
+            border: none;
+        }
         
         /* QR Scanner Modal */
         .scanner-modal {
@@ -505,6 +598,7 @@
             </svg>
             Scan QR Code
         </button>
+        <button class="manual-entry-link" onclick="showManualEntry()">Can't scan? Enter code manually</button>
         <div id="scanStatus" class="user-info" style="display: none;"></div>
     </div>
     
@@ -517,6 +611,22 @@
         <div id="qr-reader"></div>
         <div class="scanner-instructions">
             Point your camera at the QR code shown on the Commander app's Web Remote Control settings
+        </div>
+    </div>
+    
+    <!-- Manual Entry Modal -->
+    <div id="manualEntryModal">
+        <div class="manual-modal-backdrop" onclick="closeManualEntry()"></div>
+        <div class="manual-modal-content">
+            <div class="manual-modal-title">Enter Connection Code</div>
+            <div class="manual-modal-subtitle">
+                In Commander app, go to Settings → Web Remote Control → Link Companion App, then tap "Copy Code" and paste it below.
+            </div>
+            <textarea id="manualCodeInput" class="manual-modal-input" rows="4" placeholder="Paste the connection code here..."></textarea>
+            <div class="manual-modal-buttons">
+                <button class="manual-cancel-btn" onclick="closeManualEntry()">Cancel</button>
+                <button class="manual-connect-btn" onclick="submitManualEntry()">Connect</button>
+            </div>
         </div>
     </div>
     
@@ -732,7 +842,7 @@
             html5QrCode.start(
                 { facingMode: "environment" },
                 {
-                    fps: 15,
+                    fps: 10,
                     qrbox: { width: 250, height: 250 }
                 },
                 onScanSuccess,
@@ -801,12 +911,12 @@
                     
                     <div class="naming-field">
                         <label>Name your car</label>
-                        <input type="text" id="carNameInput" placeholder="e.g. BYD Seal" value="${qrData.defaultCarName}" maxlength="30">
+                        <input type="text" id="carNameInput" placeholder="e.g. My BYD Seal" value="${qrData.defaultCarName}" maxlength="30">
                     </div>
                     
                     <div class="naming-field">
                         <label>Your device name</label>
-                        <input type="text" id="deviceNameInput" placeholder="e.g. John's iPhone" value="${existingDeviceName || ''}" maxlength="30">
+                        <input type="text" id="deviceNameInput" placeholder="e.g. Dhruv's iPhone" value="${existingDeviceName || ''}" maxlength="30">
                         <span class="naming-hint">This name will appear in Commander app</span>
                     </div>
                     
@@ -878,6 +988,37 @@
         
         function onScanFailure(error) {
             // Ignore continuous scan failures - only log occasionally
+        }
+        
+        // Manual Entry Functions
+        function showManualEntry() {
+            document.getElementById('manualEntryModal').classList.add('active');
+            document.getElementById('manualCodeInput').focus();
+        }
+        
+        function closeManualEntry() {
+            document.getElementById('manualEntryModal').classList.remove('active');
+            document.getElementById('manualCodeInput').value = '';
+        }
+        
+        function submitManualEntry() {
+            const code = document.getElementById('manualCodeInput').value.trim();
+            
+            if (!code) {
+                showError('Please enter the connection code');
+                return;
+            }
+            
+            try {
+                // Try to parse as JSON
+                const data = JSON.parse(code);
+                closeManualEntry();
+                
+                // Use the same flow as QR scan
+                onScanSuccess(code);
+            } catch (e) {
+                showError('Invalid code format. Make sure you copied the entire code.');
+            }
         }
         
         // Connection Functions
@@ -1294,8 +1435,51 @@
             }
             
             if (useP2P && dataChannel && dataChannel.readyState === 'open') {
-                // Send via P2P data channel
-                return sendP2PRequest('POST', `/api/actions/${action}`, params);
+                // Translate action to Commander's expected format
+                let command, commandParams;
+                
+                switch (action) {
+                    case 'setTrunkState':
+                        command = 'trunk';
+                        commandParams = { action: params.state };
+                        break;
+                    case 'setReadingLight':
+                        command = 'readingLight';
+                        commandParams = { on: params.enabled };
+                        break;
+                    case 'setAcState':
+                        command = 'ac';
+                        commandParams = { on: params.enabled };
+                        break;
+                    case 'setAcTemperature':
+                        command = 'ac';
+                        commandParams = { on: true, temp: params.temperature };
+                        break;
+                    case 'setSeatMemory':
+                        command = 'seatMemory';
+                        commandParams = { position: params.position };
+                        break;
+                    case 'setWindowToPercentage':
+                        command = 'window';
+                        const posMap = { 1: 'lf', 2: 'rf', 3: 'lr', 4: 'rr' };
+                        commandParams = { position: posMap[params.area] || 'lf', percent: params.percent };
+                        break;
+                    default:
+                        command = action;
+                        commandParams = params;
+                }
+                
+                try {
+                    const result = await sendP2PRequest('POST', '/api/car/command', {
+                        command: command,
+                        params: commandParams
+                    });
+                    console.log('Command result:', result);
+                    return result;
+                } catch (err) {
+                    console.error('Command failed:', err);
+                    showError('Command failed: ' + err.message);
+                }
             } else {
                 showError('Not connected to car. Please wait for P2P connection.');
             }
