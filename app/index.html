@@ -1276,9 +1276,6 @@
             
             // Initialize map
             initMap();
-            
-            // Start data updates
-            startDataUpdates();
         }
         
         // QR Scanner Functions
@@ -1667,6 +1664,9 @@
                     debugLog('Auto-fetching initial status...');
                     fetchStatus();
                 }, 500);
+                
+                // Start periodic data updates now that P2P is ready
+                startDataUpdates();
                 
                 // Start revocation check
                 startRevocationCheck();
