@@ -1011,6 +1011,7 @@
         let map = null;
         let carMarker = null;
         let updateInterval = null;
+        let pingInterval = null;
         
         // STUN/TURN servers for NAT traversal - Metered.ca configuration
         const rtcConfig = {
@@ -1075,6 +1076,9 @@
             
             // Hide retry button on successful connection
             hideRetryButton();
+            
+            // Initialize map once we're showing the app (fixes blank map)
+            setTimeout(initMap, 100);
         }
         
         // Menu functions
@@ -1108,7 +1112,46 @@
             document.getElementById('automationsPage').style.display = page === 'automations' ? 'block' : 'none';
             
             if (page === 'automations') {
+                stopDataUpdates();
                 loadAutomations();
+            } else {
+                if (useP2P && dataChannel && dataChannel.readyState === 'open') {
+                    startDataUpdates();
+                }
+                if (map) {
+                    setTimeout(() => { try { map.invalidateSize(); } catch (e) {} }, 50);
+                }
+            }
+        }
+        
+        function stopDataUpdates() {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+                updateInterval = null;
+            }
+        }
+        
+        function startPing() {
+            if (pingInterval) return;
+            pingInterval = setInterval(ping, 5000);
+        }
+        
+        function stopPing() {
+            if (pingInterval) {
+                clearInterval(pingInterval);
+                pingInterval = null;
+            }
+        }
+        
+        async function ping() {
+            if (!connectionInfo || !useP2P || !dataChannel || dataChannel.readyState !== 'open') return;
+            try {
+                const data = await sendP2PRequest('GET', '/api/car/status');
+                if (data && data.body && currentPage === 'home') {
+                    updateUI(data.body);
+                }
+            } catch (e) {
+                console.warn('Ping failed:', e);
             }
         }
         
@@ -1273,9 +1316,6 @@
             if (currentPage === 'automations') {
                 loadAutomations();
             }
-            
-            // Initialize map
-            initMap();
         }
         
         // QR Scanner Functions
@@ -1665,8 +1705,9 @@
                     fetchStatus();
                 }, 500);
                 
-                // Start periodic data updates now that P2P is ready
+                // Start periodic data updates (Home) and ping keepalive (both pages)
                 startDataUpdates();
+                startPing();
                 
                 // Start revocation check
                 startRevocationCheck();
@@ -1681,6 +1722,8 @@
                 useP2P = false;
                 updateConnectionStatus(false);
                 document.getElementById('deviceStatus').textContent = 'Disconnected';
+                stopDataUpdates();
+                stopPing();
             };
             
             channel.onerror = (error) => {
@@ -1826,11 +1869,9 @@
                 stopSignalingPoll();
                 stopRevocationCheck();
                 
-                // Stop updates
-                if (updateInterval) {
-                    clearInterval(updateInterval);
-                    updateInterval = null;
-                }
+                // Stop updates and ping
+                stopDataUpdates();
+                stopPing();
                 
                 // Clear cached connection
                 localStorage.removeItem(STORAGE_KEY);
@@ -1874,11 +1915,8 @@
                         }
                         useP2P = false;
                         stopSignalingPoll();
-                        
-                        if (updateInterval) {
-                            clearInterval(updateInterval);
-                            updateInterval = null;
-                        }
+                        stopDataUpdates();
+                        stopPing();
                         
                         localStorage.removeItem(STORAGE_KEY);
                         connectionInfo = null;
@@ -2053,12 +2091,17 @@
         // Map initialization
         function initMap() {
             if (map) return;
+            const el = document.getElementById('map');
+            if (!el) return;
             
             map = L.map('map').setView([0, 0], 15);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            const layer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
                 attribution: '© OpenStreetMap'
-            }).addTo(map);
+            });
+            layer.on('tileerror', function () { console.warn('Map tile failed to load'); });
+            layer.addTo(map);
+            setTimeout(function () { try { map.invalidateSize(); } catch (e) {} }, 150);
         }
         
         function updateCarLocation(lat, lon) {
@@ -2082,12 +2125,10 @@
             }
         }
         
-        // Data updates
+        // Data updates (Home only; ping runs on both Home and Automations)
         function startDataUpdates() {
-            // Initial update
+            stopDataUpdates();
             fetchStatus();
-            
-            // Update every 2 seconds
             updateInterval = setInterval(fetchStatus, 2000);
         }
         
