@@ -330,16 +330,23 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 8px;
+            gap: 12px;
         }
         .automation-name {
             font-size: 16px;
             font-weight: 500;
             color: #F1F3F6;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         .automation-toggle {
             position: relative;
+            display: inline-block;
             width: 44px;
             height: 24px;
+            flex-shrink: 0;
         }
         .automation-toggle input {
             opacity: 0;
@@ -971,12 +978,19 @@
         <div id="automationsPage" style="display: none;">
             <div class="page-header">
                 <h2 class="page-title">Automations</h2>
-                <button class="add-automation-btn" onclick="showCreateAutomation()">
-                    <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                    </svg>
-                    New
-                </button>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button class="icon-button" onclick="loadAutomations()" title="Refresh automations">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                        </svg>
+                    </button>
+                    <button class="add-automation-btn" onclick="showCreateAutomation()">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                        </svg>
+                        New
+                    </button>
+                </div>
             </div>
             
             <div id="automationsList" class="automations-list">
@@ -1012,6 +1026,8 @@
         let carMarker = null;
         let updateInterval = null;
         let pingInterval = null;
+        let consecutivePingFailures = 0;
+        const MAX_PING_FAILURES = 3;
         
         // STUN/TURN servers for NAT traversal - Metered.ca configuration
         const rtcConfig = {
@@ -1144,14 +1160,52 @@
         }
         
         async function ping() {
-            if (!connectionInfo || !useP2P || !dataChannel || dataChannel.readyState !== 'open') return;
+            if (!connectionInfo || !useP2P || !dataChannel || dataChannel.readyState !== 'open') {
+                consecutivePingFailures++;
+                if (consecutivePingFailures >= MAX_PING_FAILURES) {
+                    console.error('Connection appears dead - too many ping failures');
+                    handleConnectionLost();
+                }
+                return;
+            }
             try {
                 const data = await sendP2PRequest('GET', '/api/car/status');
+                consecutivePingFailures = 0;
                 if (data && data.body && currentPage === 'home') {
                     updateUI(data.body);
                 }
             } catch (e) {
-                console.warn('Ping failed:', e);
+                consecutivePingFailures++;
+                console.warn('Ping failed:', e, `(${consecutivePingFailures}/${MAX_PING_FAILURES})`);
+                if (consecutivePingFailures >= MAX_PING_FAILURES) {
+                    console.error('Connection lost - ping failed too many times');
+                    handleConnectionLost();
+                }
+            }
+        }
+        
+        function handleConnectionLost() {
+            if (!useP2P) return;
+            console.error('Handling connection loss...');
+            useP2P = false;
+            updateConnectionStatus(false);
+            document.getElementById('deviceStatus').textContent = 'Disconnected';
+            stopDataUpdates();
+            stopPing();
+            consecutivePingFailures = 0;
+            showRetryButton();
+            
+            if (dataChannel) {
+                try {
+                    dataChannel.close();
+                } catch (e) {}
+                dataChannel = null;
+            }
+            if (peerConnection) {
+                try {
+                    peerConnection.close();
+                } catch (e) {}
+                peerConnection = null;
             }
         }
         
@@ -1529,6 +1583,7 @@
                 updateConnectionStatus(false);
                 document.getElementById('deviceStatus').textContent = 'Car offline';
                 showAppScreen();
+                showRetryButton();
             }
         }
         
@@ -1612,6 +1667,7 @@
                 updateConnectionStatus(false);
                 showError('Failed to initialize P2P connection: ' + error.message);
                 showAppScreen();
+                showRetryButton();
             }
         }
         
@@ -1674,13 +1730,7 @@
                 } else if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
                     updateConnectionStatus(false);
                     document.getElementById('deviceStatus').textContent = 'Disconnected';
-                    // Try to reconnect
-                    setTimeout(() => {
-                        if (!useP2P && connectionInfo) {
-                            console.log('Attempting to reconnect...');
-                            initP2P();
-                        }
-                    }, 5000);
+                    showRetryButton();
                 }
             };
             
@@ -1706,6 +1756,7 @@
                 }, 500);
                 
                 // Start periodic data updates (Home) and ping keepalive (both pages)
+                consecutivePingFailures = 0;
                 startDataUpdates();
                 startPing();
                 
@@ -1724,6 +1775,7 @@
                 document.getElementById('deviceStatus').textContent = 'Disconnected';
                 stopDataUpdates();
                 stopPing();
+                showRetryButton();
             };
             
             channel.onerror = (error) => {
@@ -2074,17 +2126,24 @@
                 
                 pendingRequests.set(requestId, { resolve, reject });
                 
-                // Timeout after 10 seconds
-                setTimeout(() => {
+                // Timeout after 8 seconds (reduced from 10 to fail faster)
+                const timeoutId = setTimeout(() => {
                     if (pendingRequests.has(requestId)) {
-                        console.warn(`Request #${requestId} timed out`);
+                        console.warn(`Request #${requestId} timed out after 8s`);
                         pendingRequests.delete(requestId);
                         reject(new Error('Request timeout'));
                     }
-                }, 10000);
+                }, 8000);
                 
-                dataChannel.send(JSON.stringify(request));
-                console.log(`Request #${requestId} sent`);
+                try {
+                    dataChannel.send(JSON.stringify(request));
+                    console.log(`Request #${requestId} sent`);
+                } catch (e) {
+                    clearTimeout(timeoutId);
+                    pendingRequests.delete(requestId);
+                    console.error(`Failed to send request #${requestId}:`, e);
+                    reject(new Error('Failed to send request: ' + e.message));
+                }
             });
         }
         
