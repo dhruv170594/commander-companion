@@ -1026,8 +1026,6 @@
         let carMarker = null;
         let updateInterval = null;
         let pingInterval = null;
-        let consecutivePingFailures = 0;
-        const MAX_PING_FAILURES = 3;
         
         // STUN/TURN servers for NAT traversal - Metered.ca configuration
         const rtcConfig = {
@@ -1038,7 +1036,6 @@
                 { urls: "turn:global.relay.metered.ca:443", username: "59300173e16020ec8eb46bc6", credential: "JkXmsWLaInmBZ3YB" },
                 { urls: "turns:global.relay.metered.ca:443?transport=tcp", username: "59300173e16020ec8eb46bc6", credential: "JkXmsWLaInmBZ3YB" },
             ],
-            iceTransportPolicy: "relay" // <— force TURN-only
         };
         
         // LocalStorage key for cached connection
@@ -1161,52 +1158,14 @@
         }
         
         async function ping() {
-            if (!connectionInfo || !useP2P || !dataChannel || dataChannel.readyState !== 'open') {
-                consecutivePingFailures++;
-                if (consecutivePingFailures >= MAX_PING_FAILURES) {
-                    console.error('Connection appears dead - too many ping failures');
-                    handleConnectionLost();
-                }
-                return;
-            }
+            if (!connectionInfo || !useP2P || !dataChannel || dataChannel.readyState !== 'open') return;
             try {
                 const data = await sendP2PRequest('GET', '/api/car/status');
-                consecutivePingFailures = 0;
                 if (data && data.body && currentPage === 'home') {
                     updateUI(data.body);
                 }
             } catch (e) {
-                consecutivePingFailures++;
-                console.warn('Ping failed:', e, `(${consecutivePingFailures}/${MAX_PING_FAILURES})`);
-                if (consecutivePingFailures >= MAX_PING_FAILURES) {
-                    console.error('Connection lost - ping failed too many times');
-                    handleConnectionLost();
-                }
-            }
-        }
-        
-        function handleConnectionLost() {
-            if (!useP2P) return;
-            console.error('Handling connection loss...');
-            useP2P = false;
-            updateConnectionStatus(false);
-            document.getElementById('deviceStatus').textContent = 'Disconnected';
-            stopDataUpdates();
-            stopPing();
-            consecutivePingFailures = 0;
-            showRetryButton();
-            
-            if (dataChannel) {
-                try {
-                    dataChannel.close();
-                } catch (e) {}
-                dataChannel = null;
-            }
-            if (peerConnection) {
-                try {
-                    peerConnection.close();
-                } catch (e) {}
-                peerConnection = null;
+                console.warn('Ping failed:', e);
             }
         }
         
@@ -1757,7 +1716,6 @@
                 }, 500);
                 
                 // Start periodic data updates (Home) and ping keepalive (both pages)
-                consecutivePingFailures = 0;
                 startDataUpdates();
                 startPing();
                 
