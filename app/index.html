@@ -920,19 +920,27 @@
         <div class="control-section">
             <div class="section-title">Windows</div>
             <div class="window-control">
-                <div class="window-label">Left Front: <span id="windowLFValue">0</span>%</div>
+                <div class="window-label">
+                    Left Front — Set: <span id="windowLFSet">0</span>%, Actual: <span id="windowLFActual">0</span>%
+                </div>
                 <input type="range" class="slider" id="windowLF" min="0" max="100" value="0">
             </div>
             <div class="window-control">
-                <div class="window-label">Right Front: <span id="windowRFValue">0</span>%</div>
+                <div class="window-label">
+                    Right Front — Set: <span id="windowRFSet">0</span>%, Actual: <span id="windowRFActual">0</span>%
+                </div>
                 <input type="range" class="slider" id="windowRF" min="0" max="100" value="0">
             </div>
             <div class="window-control">
-                <div class="window-label">Left Rear: <span id="windowLRValue">0</span>%</div>
+                <div class="window-label">
+                    Left Rear — Set: <span id="windowLRSet">0</span>%, Actual: <span id="windowLRActual">0</span>%
+                </div>
                 <input type="range" class="slider" id="windowLR" min="0" max="100" value="0">
             </div>
             <div class="window-control">
-                <div class="window-label">Right Rear: <span id="windowRRValue">0</span>%</div>
+                <div class="window-label">
+                    Right Rear — Set: <span id="windowRRSet">0</span>%, Actual: <span id="windowRRActual">0</span>%
+                </div>
                 <input type="range" class="slider" id="windowRR" min="0" max="100" value="0">
             </div>
         </div>
@@ -951,13 +959,23 @@
         <!-- AC Control -->
         <div class="control-section">
             <div class="section-title">AC Control</div>
-            <div class="segmented-control-label">Temperature</div>
+            <div class="segmented-control-label">Temperature (Set)</div>
             <div class="segmented-control">
                 <button class="decrement-btn" onclick="adjustAcTemp(-1)">−</button>
                 <span class="value-display" id="acTempDisplay">22°C</span>
                 <button class="increment-btn" onclick="adjustAcTemp(1)">+</button>
             </div>
-            <div class="button-group">
+            <div class="status-label" id="acTempActualText" style="margin-top: 6px;">Actual: --°C</div>
+            
+            <div class="segmented-control-label" style="margin-top: 16px;">Fan Speed (Set)</div>
+            <div class="segmented-control">
+                <button class="decrement-btn" onclick="adjustAcFan(-1)">−</button>
+                <span class="value-display" id="acFanDisplay">3</span>
+                <button class="increment-btn" onclick="adjustAcFan(1)">+</button>
+            </div>
+            <div class="status-label" id="acFanActualText" style="margin-top: 6px;">Actual: --</div>
+            
+            <div class="button-group" style="margin-top: 16px;">
                 <button onclick="sendCommand('setAcState', {enabled: true})">AC On</button>
                 <button onclick="sendCommand('setAcState', {enabled: false})">AC Off</button>
             </div>
@@ -970,6 +988,47 @@
                 <button onclick="sendCommand('setSeatMemory', {position: 1})">Position 1</button>
                 <button onclick="sendCommand('setSeatMemory', {position: 2})">Position 2</button>
                 <button onclick="sendCommand('setSeatMemory', {position: 3})">Position 3</button>
+            </div>
+        </div>
+        
+        <!-- Seat Comfort -->
+        <div class="control-section">
+            <div class="section-title">Seat Comfort</div>
+            
+            <div class="window-control">
+                <div class="window-label">Driver Heating</div>
+                <div class="button-group">
+                    <button onclick="setSeatHeating('driver', 0)">Off</button>
+                    <button onclick="setSeatHeating('driver', 1)">1</button>
+                    <button onclick="setSeatHeating('driver', 2)">2</button>
+                </div>
+            </div>
+            
+            <div class="window-control">
+                <div class="window-label">Passenger Heating</div>
+                <div class="button-group">
+                    <button onclick="setSeatHeating('passenger', 0)">Off</button>
+                    <button onclick="setSeatHeating('passenger', 1)">1</button>
+                    <button onclick="setSeatHeating('passenger', 2)">2</button>
+                </div>
+            </div>
+            
+            <div class="window-control">
+                <div class="window-label">Driver Ventilation</div>
+                <div class="button-group">
+                    <button onclick="setSeatVentilation('driver', 0)">Off</button>
+                    <button onclick="setSeatVentilation('driver', 1)">1</button>
+                    <button onclick="setSeatVentilation('driver', 2)">2</button>
+                </div>
+            </div>
+            
+            <div class="window-control">
+                <div class="window-label">Passenger Ventilation</div>
+                <div class="button-group">
+                    <button onclick="setSeatVentilation('passenger', 0)">Off</button>
+                    <button onclick="setSeatVentilation('passenger', 1)">1</button>
+                    <button onclick="setSeatVentilation('passenger', 2)">2</button>
+                </div>
             </div>
         </div>
         </div><!-- End homePage -->
@@ -2034,6 +2093,10 @@
                         command = 'ac';
                         commandParams = { on: true, temp: params.temperature };
                         break;
+                    case 'setAcFanSpeed':
+                        command = 'ac';
+                        commandParams = { on: true, fan: params.fan };
+                        break;
                     case 'setSeatMemory':
                         command = 'seatMemory';
                         commandParams = { position: params.position };
@@ -2186,35 +2249,101 @@
                 updateCarLocation(data.location.lat, data.location.lng);
             }
             
-            // Update AC temp
+            // Update AC temp actual (and initialise set value once)
             if (data.ac && data.ac.temp !== undefined) {
-                document.getElementById('acTempDisplay').textContent = data.ac.temp + '°C';
-                currentAcTemp = data.ac.temp;
+                const actualTempEl = document.getElementById('acTempActualText');
+                if (actualTempEl) {
+                    actualTempEl.textContent = 'Actual: ' + data.ac.temp + '°C';
+                }
+                if (!acTempInitialized) {
+                    currentAcTemp = data.ac.temp;
+                    const setTempEl = document.getElementById('acTempDisplay');
+                    if (setTempEl) {
+                        setTempEl.textContent = currentAcTemp + '°C';
+                    }
+                    acTempInitialized = true;
+                }
             }
             
-            // Update windows
+            // Update AC fan actual (and initialise set value once)
+            if (data.ac && data.ac.fan !== undefined) {
+                const actualFanEl = document.getElementById('acFanActualText');
+                if (actualFanEl) {
+                    actualFanEl.textContent = 'Actual: ' + data.ac.fan;
+                }
+                if (!acFanInitialized) {
+                    currentAcFan = data.ac.fan;
+                    const setFanEl = document.getElementById('acFanDisplay');
+                    if (setFanEl) {
+                        setFanEl.textContent = currentAcFan;
+                    }
+                    acFanInitialized = true;
+                }
+            }
+            
+            // Update windows (actual vs set)
             if (data.windows) {
+                const firstInit = !windowsInitialized;
                 if (data.windows.lf !== undefined) {
-                    document.getElementById('windowLF').value = data.windows.lf;
-                    document.getElementById('windowLFValue').textContent = data.windows.lf;
+                    const actualEl = document.getElementById('windowLFActual');
+                    if (actualEl) actualEl.textContent = data.windows.lf;
+                    if (firstInit) {
+                        const slider = document.getElementById('windowLF');
+                        const setEl = document.getElementById('windowLFSet');
+                        if (slider && setEl) {
+                            slider.value = data.windows.lf;
+                            setEl.textContent = data.windows.lf;
+                        }
+                    }
                 }
                 if (data.windows.rf !== undefined) {
-                    document.getElementById('windowRF').value = data.windows.rf;
-                    document.getElementById('windowRFValue').textContent = data.windows.rf;
+                    const actualEl = document.getElementById('windowRFActual');
+                    if (actualEl) actualEl.textContent = data.windows.rf;
+                    if (firstInit) {
+                        const slider = document.getElementById('windowRF');
+                        const setEl = document.getElementById('windowRFSet');
+                        if (slider && setEl) {
+                            slider.value = data.windows.rf;
+                            setEl.textContent = data.windows.rf;
+                        }
+                    }
                 }
                 if (data.windows.lr !== undefined) {
-                    document.getElementById('windowLR').value = data.windows.lr;
-                    document.getElementById('windowLRValue').textContent = data.windows.lr;
+                    const actualEl = document.getElementById('windowLRActual');
+                    if (actualEl) actualEl.textContent = data.windows.lr;
+                    if (firstInit) {
+                        const slider = document.getElementById('windowLR');
+                        const setEl = document.getElementById('windowLRSet');
+                        if (slider && setEl) {
+                            slider.value = data.windows.lr;
+                            setEl.textContent = data.windows.lr;
+                        }
+                    }
                 }
                 if (data.windows.rr !== undefined) {
-                    document.getElementById('windowRR').value = data.windows.rr;
-                    document.getElementById('windowRRValue').textContent = data.windows.rr;
+                    const actualEl = document.getElementById('windowRRActual');
+                    if (actualEl) actualEl.textContent = data.windows.rr;
+                    if (firstInit) {
+                        const slider = document.getElementById('windowRR');
+                        const setEl = document.getElementById('windowRRSet');
+                        if (slider && setEl) {
+                            slider.value = data.windows.rr;
+                            setEl.textContent = data.windows.rr;
+                        }
+                    }
+                }
+                if (firstInit) {
+                    windowsInitialized = true;
                 }
             }
         }
         
-        // AC temperature control
+        // AC temperature / fan control + window initialisation
         let currentAcTemp = 22;
+        let acTempInitialized = false;
+        let currentAcFan = 3;
+        let acFanInitialized = false;
+        let windowsInitialized = false;
         
         function adjustAcTemp(delta) {
             currentAcTemp = Math.min(30, Math.max(16, currentAcTemp + delta));
@@ -2222,12 +2351,18 @@
             sendCommand('setAcTemperature', { temperature: currentAcTemp });
         }
         
+        function adjustAcFan(delta) {
+            currentAcFan = Math.min(5, Math.max(1, currentAcFan + delta));
+            document.getElementById('acFanDisplay').textContent = currentAcFan;
+            sendCommand('setAcFanSpeed', { fan: currentAcFan });
+        }
+        
         // Window slider handlers
         ['LF', 'RF', 'LR', 'RR'].forEach(windowId => {
             const slider = document.getElementById('window' + windowId);
-            const valueDisplay = document.getElementById('window' + windowId + 'Value');
+            const valueDisplay = document.getElementById('window' + windowId + 'Set');
             
-            if (slider) {
+            if (slider && valueDisplay) {
                 slider.addEventListener('input', () => {
                     valueDisplay.textContent = slider.value;
                 });
@@ -2241,6 +2376,41 @@
                 });
             }
         });
+        
+        // Seat heating / ventilation controls
+        async function setSeatHeating(position, level) {
+            if (!connectionInfo) {
+                showError('Not connected to car');
+                return;
+            }
+            if (!useP2P || !dataChannel || dataChannel.readyState !== 'open') {
+                showError('Not connected to car. Please wait for P2P connection.');
+                return;
+            }
+            try {
+                await sendP2PRequest('POST', '/api/seat/heating', { position, level });
+            } catch (err) {
+                console.error('Failed to set seat heating:', err);
+                showError('Failed to set seat heating: ' + err.message);
+            }
+        }
+        
+        async function setSeatVentilation(position, level) {
+            if (!connectionInfo) {
+                showError('Not connected to car');
+                return;
+            }
+            if (!useP2P || !dataChannel || dataChannel.readyState !== 'open') {
+                showError('Not connected to car. Please wait for P2P connection.');
+                return;
+            }
+            try {
+                await sendP2PRequest('POST', '/api/seat/ventilation', { position, level });
+            } catch (err) {
+                console.error('Failed to set seat ventilation:', err);
+                showError('Failed to set seat ventilation: ' + err.message);
+            }
+        }
     </script>
 </body>
 </html>
