@@ -7,6 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Commander Companion">
+    <meta name="app-version" content="1">
     <title>Commander Companion</title>
     <link rel="manifest" href="/app/manifest.json">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -179,6 +180,36 @@
         button:disabled {
             background: #666;
             cursor: not-allowed;
+        }
+        .update-banner {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 9999;
+            background: #1F8AFF;
+            color: white;
+            padding: 12px 16px;
+            padding-top: calc(12px + env(safe-area-inset-top));
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+        .update-banner.show {
+            display: flex;
+        }
+        .update-banner span { flex: 1; font-size: 14px; }
+        .update-banner .update-btn {
+            background: white;
+            color: #1F8AFF;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
         }
         .loading {
             text-align: center;
@@ -782,6 +813,11 @@
     </style>
 </head>
 <body>
+    <!-- Update available banner (shown when server has newer version) -->
+    <div id="updateBanner" class="update-banner">
+        <span>A new version of the Companion app is available.</span>
+        <button type="button" class="update-btn" onclick="applyUpdate()">Update</button>
+    </div>
     <!-- QR Scan Screen -->
     <div id="scanScreen" class="scan-container">
         <div class="scan-title">Commander Companion</div>
@@ -916,31 +952,23 @@
             </div>
         </div>
         
-        <!-- Window Controls -->
+        <!-- Window Controls (set only - no actual value from car) -->
         <div class="control-section">
             <div class="section-title">Windows</div>
             <div class="window-control">
-                <div class="window-label">
-                    Left Front — Set: <span id="windowLFSet">0</span>%, Actual: <span id="windowLFActual">0</span>%
-                </div>
+                <div class="window-label">Left Front — Set: <span id="windowLFSet">0</span>%</div>
                 <input type="range" class="slider" id="windowLF" min="0" max="100" value="0">
             </div>
             <div class="window-control">
-                <div class="window-label">
-                    Right Front — Set: <span id="windowRFSet">0</span>%, Actual: <span id="windowRFActual">0</span>%
-                </div>
+                <div class="window-label">Right Front — Set: <span id="windowRFSet">0</span>%</div>
                 <input type="range" class="slider" id="windowRF" min="0" max="100" value="0">
             </div>
             <div class="window-control">
-                <div class="window-label">
-                    Left Rear — Set: <span id="windowLRSet">0</span>%, Actual: <span id="windowLRActual">0</span>%
-                </div>
+                <div class="window-label">Left Rear — Set: <span id="windowLRSet">0</span>%</div>
                 <input type="range" class="slider" id="windowLR" min="0" max="100" value="0">
             </div>
             <div class="window-control">
-                <div class="window-label">
-                    Right Rear — Set: <span id="windowRRSet">0</span>%, Actual: <span id="windowRRActual">0</span>%
-                </div>
+                <div class="window-label">Right Rear — Set: <span id="windowRRSet">0</span>%</div>
                 <input type="range" class="slider" id="windowRR" min="0" max="100" value="0">
             </div>
         </div>
@@ -949,8 +977,8 @@
         <div class="control-section">
             <div class="section-title">Quick Controls</div>
             <div class="button-group">
-                <button onclick="sendCommand('setTrunkState', {state: 'open'})">Open Trunk</button>
-                <button onclick="sendCommand('setTrunkState', {state: 'close'})">Close Trunk</button>
+                <button id="btnTrunkOpen" onclick="sendTrunkCommand('open')">Open Trunk</button>
+                <button id="btnTrunkClose" onclick="sendTrunkCommand('close')">Close Trunk</button>
                 <button onclick="sendCommand('setReadingLight', {enabled: true})">Cabin Light On</button>
                 <button onclick="sendCommand('setReadingLight', {enabled: false})">Cabin Light Off</button>
             </div>
@@ -1127,7 +1155,32 @@
             } else {
                 showScanScreen();
             }
+            
+            // Check for app update (bookmarked users may have old cached version)
+            checkForUpdate();
         });
+        
+        function applyUpdate() {
+            location.reload(true);
+        }
+        
+        async function checkForUpdate() {
+            try {
+                const meta = document.querySelector('meta[name="app-version"]');
+                const clientVersion = meta ? parseInt(meta.getAttribute('content') || '0', 10) : 0;
+                const url = 'version.json?t=' + Date.now();
+                const res = await fetch(url, { cache: 'no-store' });
+                if (!res.ok) return;
+                const data = await res.json();
+                const serverVersion = typeof data.version === 'number' ? data.version : parseInt(data.version || '0', 10);
+                if (serverVersion > clientVersion) {
+                    const banner = document.getElementById('updateBanner');
+                    if (banner) banner.classList.add('show');
+                }
+            } catch (e) {
+                // Ignore (e.g. offline or version.json not deployed)
+            }
+        }
         
         function showScanScreen() {
             document.getElementById('scanScreen').style.display = 'flex';
@@ -2065,6 +2118,20 @@
             }, 5000);
         }
         
+        // Trunk: block if car moving (server also blocks; show message on failure)
+        async function sendTrunkCommand(state) {
+            const openBtn = document.getElementById('btnTrunkOpen');
+            const closeBtn = document.getElementById('btnTrunkClose');
+            if ((openBtn && openBtn.disabled) || (closeBtn && closeBtn.disabled)) {
+                showError('Tailgate control prohibited as the car is moving');
+                return;
+            }
+            const result = await sendCommand('setTrunkState', { state: state });
+            if (result && result.body && result.body.success === false && result.body.message) {
+                showError(result.body.message);
+            }
+        }
+        
         // Send command via P2P
         async function sendCommand(action, params = {}) {
             if (!connectionInfo) {
@@ -2233,6 +2300,16 @@
             // Update status cards
             if (data.speed !== undefined) {
                 document.getElementById('speedValue').textContent = Math.round(data.speed) + ' km/h';
+                // Grey out tailgate when car is moving
+                const trunkOpen = document.getElementById('btnTrunkOpen');
+                const trunkClose = document.getElementById('btnTrunkClose');
+                if (trunkOpen && trunkClose) {
+                    const moving = data.speed > 0;
+                    trunkOpen.disabled = moving;
+                    trunkClose.disabled = moving;
+                    trunkOpen.title = moving ? 'Unavailable while car is moving' : '';
+                    trunkClose.title = moving ? 'Unavailable while car is moving' : '';
+                }
             }
             if (data.soc !== undefined) {
                 document.getElementById('socValue').textContent = Math.round(data.soc) + '%';
@@ -2281,69 +2358,14 @@
                 }
             }
             
-            // Update windows (actual vs set)
-            if (data.windows) {
-                const firstInit = !windowsInitialized;
-                if (data.windows.lf !== undefined) {
-                    const actualEl = document.getElementById('windowLFActual');
-                    if (actualEl) actualEl.textContent = data.windows.lf;
-                    if (firstInit) {
-                        const slider = document.getElementById('windowLF');
-                        const setEl = document.getElementById('windowLFSet');
-                        if (slider && setEl) {
-                            slider.value = data.windows.lf;
-                            setEl.textContent = data.windows.lf;
-                        }
-                    }
-                }
-                if (data.windows.rf !== undefined) {
-                    const actualEl = document.getElementById('windowRFActual');
-                    if (actualEl) actualEl.textContent = data.windows.rf;
-                    if (firstInit) {
-                        const slider = document.getElementById('windowRF');
-                        const setEl = document.getElementById('windowRFSet');
-                        if (slider && setEl) {
-                            slider.value = data.windows.rf;
-                            setEl.textContent = data.windows.rf;
-                        }
-                    }
-                }
-                if (data.windows.lr !== undefined) {
-                    const actualEl = document.getElementById('windowLRActual');
-                    if (actualEl) actualEl.textContent = data.windows.lr;
-                    if (firstInit) {
-                        const slider = document.getElementById('windowLR');
-                        const setEl = document.getElementById('windowLRSet');
-                        if (slider && setEl) {
-                            slider.value = data.windows.lr;
-                            setEl.textContent = data.windows.lr;
-                        }
-                    }
-                }
-                if (data.windows.rr !== undefined) {
-                    const actualEl = document.getElementById('windowRRActual');
-                    if (actualEl) actualEl.textContent = data.windows.rr;
-                    if (firstInit) {
-                        const slider = document.getElementById('windowRR');
-                        const setEl = document.getElementById('windowRRSet');
-                        if (slider && setEl) {
-                            slider.value = data.windows.rr;
-                            setEl.textContent = data.windows.rr;
-                        }
-                    }
-                }
-                if (firstInit) {
-                    windowsInitialized = true;
-                }
-            }
+            // Windows: no actual value from car - use slider to set only
         }
         
-        // AC temperature / fan control + window initialisation
+        // AC temperature / fan control
         let currentAcTemp = 22;
         let acTempInitialized = false;
         let currentAcFan = 3;
         let acFanInitialized = false;
-        let windowsInitialized = false;
         
         function adjustAcTemp(delta) {
             currentAcTemp = Math.min(30, Math.max(16, currentAcTemp + delta));
