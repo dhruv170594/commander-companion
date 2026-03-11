@@ -436,6 +436,120 @@
             color: #f9a825;
             margin-bottom: 12px;
         }
+        .cached-notice {
+            font-size: 12px;
+            color: #9AA3AF;
+            margin-bottom: 12px;
+        }
+        .automation-badge {
+            font-size: 11px;
+            color: #9AA3AF;
+        }
+        .create-automation-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding: 0;
+        }
+        .create-automation-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+        }
+        .create-automation-content {
+            position: relative;
+            background: #18273c;
+            border-radius: 16px 16px 0 0;
+            width: 100%;
+            max-height: 85vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .create-automation-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            border-bottom: 1px solid #2a3d4d;
+        }
+        .create-automation-header h3 { margin: 0; font-size: 18px; }
+        .create-automation-close {
+            background: none;
+            border: none;
+            color: #9AA3AF;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0 8px;
+        }
+        .create-automation-body {
+            padding: 16px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        .create-automation-field { margin-bottom: 16px; }
+        .create-automation-field label {
+            display: block;
+            font-size: 12px;
+            color: #9AA3AF;
+            margin-bottom: 6px;
+        }
+        .create-automation-field input, .create-automation-field select {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #2a3d4d;
+            background: #111b23;
+            color: #F1F3F6;
+            font-size: 14px;
+        }
+        .create-automation-params { margin-top: 8px; }
+        .add-action-btn {
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: transparent;
+            border: 1px dashed #2a3d4d;
+            color: #1F8AFF;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .add-action-btn:active { opacity: 0.8; }
+        .action-item {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .action-item select { flex: 1; }
+        .action-item input { flex: 0 0 80px; }
+        .action-item .remove-action {
+            background: none;
+            border: none;
+            color: #ef5350;
+            cursor: pointer;
+            padding: 4px;
+        }
+        .create-automation-footer {
+            display: flex;
+            gap: 12px;
+            padding: 16px;
+            border-top: 1px solid #2a3d4d;
+        }
+        .create-automation-cancel, .create-automation-save {
+            flex: 1;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+        }
+        .create-automation-cancel { background: #2a3d4d; color: #F1F3F6; }
+        .create-automation-save { background: #1F8AFF; color: white; }
         .no-automations {
             text-align: center;
             color: #6b7a8a;
@@ -1080,6 +1194,7 @@
                 </div>
             </div>
             
+            <div id="automationsCacheNotice" class="cached-notice" style="display: none;"></div>
             <div id="automationsList" class="automations-list">
                 <div class="loading-automations">Loading automations...</div>
             </div>
@@ -1088,6 +1203,45 @@
                 <div class="section-title">Pending Sync</div>
                 <div class="offline-notice">These automations will sync when the car comes online</div>
                 <div id="pendingAutomationsList"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Create Automation Modal -->
+    <div id="createAutomationModal" class="create-automation-modal" style="display: none;">
+        <div class="create-automation-backdrop" onclick="closeCreateAutomation()"></div>
+        <div class="create-automation-content">
+            <div class="create-automation-header">
+                <h3>New Automation</h3>
+                <button type="button" class="create-automation-close" onclick="closeCreateAutomation()">&times;</button>
+            </div>
+            <div class="create-automation-body">
+                <div class="create-automation-field">
+                    <label>Name</label>
+                    <input type="text" id="createAutomationName" placeholder="e.g. Cool down on arrival" maxlength="50">
+                </div>
+                <div class="create-automation-field">
+                    <label>When (Trigger)</label>
+                    <select id="createAutomationTrigger" onchange="updateCreateTriggerParams()">
+                        <option value="TIME_OF_DAY">At specific time</option>
+                        <option value="BATTERY_LOW">Battery below %</option>
+                        <option value="SPEED_ABOVE">Speed above km/h</option>
+                        <option value="SPEED_BELOW">Speed below km/h</option>
+                        <option value="SYSTEM_BOOT">When car starts</option>
+                        <option value="SUNRISE">At sunrise</option>
+                        <option value="SUNSET">At sunset</option>
+                    </select>
+                </div>
+                <div id="createAutomationTriggerParams" class="create-automation-params"></div>
+                <div class="create-automation-field">
+                    <label>Then (Action)</label>
+                    <div id="createAutomationActions"></div>
+                    <button type="button" class="add-action-btn" onclick="addCreateAction()">+ Add action</button>
+                </div>
+            </div>
+            <div class="create-automation-footer">
+                <button type="button" class="create-automation-cancel" onclick="closeCreateAutomation()">Cancel</button>
+                <button type="button" class="create-automation-save" onclick="saveCreateAutomation()">Create</button>
             </div>
         </div>
     </div>
@@ -1319,55 +1473,139 @@
         // Automations functions
         let automations = [];
         let pendingAutomations = JSON.parse(localStorage.getItem('pending_automations') || '[]');
+        const CACHED_AUTOMATIONS_KEY = 'cached_automations';
+        const CACHED_AUTOMATIONS_TIME_KEY = 'cached_automations_time';
+        const CACHE_DEVICE_KEY = 'cached_automations_device';
+        
+        function getCacheKey() {
+            return connectionInfo ? (connectionInfo.deviceToken || connectionInfo.userId || 'default') : 'default';
+        }
+        
+        function saveAutomationsToCache(list) {
+            if (!connectionInfo) return;
+            try {
+                localStorage.setItem(CACHED_AUTOMATIONS_KEY, JSON.stringify(list));
+                localStorage.setItem(CACHED_AUTOMATIONS_TIME_KEY, Date.now().toString());
+                localStorage.setItem(CACHE_DEVICE_KEY, getCacheKey());
+            } catch (e) { console.warn('Failed to cache automations', e); }
+        }
+        
+        function getCachedAutomations() {
+            try {
+                const deviceKey = getCacheKey();
+                const cachedDevice = localStorage.getItem(CACHE_DEVICE_KEY);
+                if (cachedDevice !== deviceKey) return null;
+                const raw = localStorage.getItem(CACHED_AUTOMATIONS_KEY);
+                return raw ? JSON.parse(raw) : null;
+            } catch (e) { return null; }
+        }
+        
+        function getCachedAutomationsTime() {
+            const t = localStorage.getItem(CACHED_AUTOMATIONS_TIME_KEY);
+            return t ? parseInt(t, 10) : null;
+        }
+        
+        function renderAutomationsList(list, fromCache = false, canToggle = true) {
+            const listEl = document.getElementById('automationsList');
+            const cacheNotice = document.getElementById('automationsCacheNotice');
+            if (cacheNotice) {
+                cacheNotice.style.display = fromCache ? 'block' : 'none';
+                if (fromCache) {
+                    const t = getCachedAutomationsTime();
+                    cacheNotice.textContent = t ? `Cached • Last synced ${formatRelativeTime(t)}` : 'Showing cached automations';
+                }
+            }
+            if (!list || list.length === 0) {
+                listEl.innerHTML = '<div class="no-automations">No automations configured</div>';
+            } else {
+                listEl.innerHTML = list.map((auto, index) => `
+                    <div class="automation-card">
+                        <div class="automation-card-header">
+                            <span class="automation-name">${escapeHtml(auto.name || 'Automation ' + (index + 1))}</span>
+                            ${canToggle ? `
+                            <label class="automation-toggle">
+                                <input type="checkbox" ${auto.enabled ? 'checked' : ''} onchange="toggleAutomation(${auto.id}, this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                            ` : '<span class="automation-badge">Syncing when connected</span>'}
+                        </div>
+                        <div class="automation-trigger">Trigger: ${formatTrigger(auto.trigger)}</div>
+                        <div class="automation-actions-count">${auto.actions?.length || 0} action(s)</div>
+                    </div>
+                `).join('');
+            }
+            showPendingAutomations();
+        }
+        
+        function formatRelativeTime(timestamp) {
+            const s = Math.floor((Date.now() - timestamp) / 1000);
+            if (s < 60) return 'just now';
+            if (s < 3600) return Math.floor(s / 60) + 'm ago';
+            if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+            return Math.floor(s / 86400) + 'd ago';
+        }
+        
+        function escapeHtml(s) {
+            if (!s) return '';
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
         
         async function loadAutomations() {
             const listEl = document.getElementById('automationsList');
+            const connected = useP2P && dataChannel && dataChannel.readyState === 'open';
             
-            if (!useP2P || !dataChannel || dataChannel.readyState !== 'open') {
-                listEl.innerHTML = '<div class="no-automations">Connect to car to view automations</div>';
-                showPendingAutomations();
+            if (!connected) {
+                const cached = getCachedAutomations();
+                if (cached && cached.length > 0) {
+                    automations = cached;
+                    renderAutomationsList(cached, true, false);
+                } else {
+                    listEl.innerHTML = '<div class="no-automations">Connect to car to view automations</div>';
+                    showPendingAutomations();
+                }
                 return;
             }
             
             listEl.innerHTML = '<div class="loading-automations">Loading automations...</div>';
+            document.getElementById('automationsCacheNotice')?.style?.setProperty?.('display', 'none');
             
             try {
                 const result = await sendP2PRequest('GET', '/api/automations');
                 automations = result.body?.automations || [];
-                
-                if (automations.length === 0) {
-                    listEl.innerHTML = '<div class="no-automations">No automations configured</div>';
-                } else {
-                    listEl.innerHTML = automations.map((auto, index) => `
-                        <div class="automation-card">
-                            <div class="automation-card-header">
-                                <span class="automation-name">${auto.name || 'Automation ' + (index + 1)}</span>
-                                <label class="automation-toggle">
-                                    <input type="checkbox" ${auto.enabled ? 'checked' : ''} onchange="toggleAutomation(${auto.id}, this.checked)">
-                                    <span class="slider"></span>
-                                </label>
-                            </div>
-                            <div class="automation-trigger">Trigger: ${formatTrigger(auto.trigger)}</div>
-                            <div class="automation-actions-count">${auto.actions?.length || 0} action(s)</div>
-                        </div>
-                    `).join('');
-                }
-                
-                showPendingAutomations();
+                saveAutomationsToCache(automations);
+                renderAutomationsList(automations, false, true);
             } catch (err) {
                 console.error('Failed to load automations:', err);
-                listEl.innerHTML = '<div class="no-automations">Failed to load automations</div>';
-                showPendingAutomations();
+                const cached = getCachedAutomations();
+                if (cached && cached.length > 0) {
+                    automations = cached;
+                    renderAutomationsList(cached, true, false);
+                    showError('Using cached automations. Reconnect to refresh.');
+                } else {
+                    listEl.innerHTML = '<div class="no-automations">Failed to load automations</div>';
+                    showPendingAutomations();
+                }
             }
         }
         
         function formatTrigger(trigger) {
             if (!trigger) return 'Unknown';
-            if (trigger.type === 'time') return `Time: ${trigger.time}`;
-            if (trigger.type === 'location') return `Location: ${trigger.locationName || 'Custom'}`;
-            if (trigger.type === 'battery') return `Battery ${trigger.condition} ${trigger.value}%`;
-            if (trigger.type === 'speed') return `Speed ${trigger.condition} ${trigger.value} km/h`;
-            return trigger.type || 'Unknown';
+            const type = (trigger.type || '').toLowerCase();
+            const params = trigger.parameters || {};
+            if (type === 'time' || type === 'time_of_day') return `Time: ${params.time || params.timeLabel || '—'}`;
+            if (type === 'location' || type === 'location_enter' || type === 'location_exit' || type === 'location_at') {
+                const label = type === 'location_enter' ? 'Enter' : type === 'location_exit' ? 'Leave' : 'At';
+                return `${label} ${params.locationName || 'Custom'}`;
+            }
+            if (type === 'battery' || type === 'battery_low') return `Battery below ${params.level || params.value || '—'}%`;
+            if (type === 'speed_above') return `Speed above ${params.speed || params.value || '—'} km/h`;
+            if (type === 'speed_below') return `Speed below ${params.speed || params.value || '—'} km/h`;
+            if (type === 'system_boot') return 'System boot';
+            if (type === 'sunrise') return 'Sunrise';
+            if (type === 'sunset') return 'Sunset';
+            return trigger.type ? String(trigger.type).replace(/_/g, ' ') : 'Unknown';
         }
         
         async function toggleAutomation(id, enabled) {
@@ -1415,9 +1653,163 @@
             showPendingAutomations();
         }
         
+        // Simplified automation builder - extensible for future advanced triggers/actions
+        const TRIGGER_CONFIG = {
+            TIME_OF_DAY: { param: 'time', label: 'Time (HH:MM)', type: 'time', default: '08:00' },
+            BATTERY_LOW: { param: 'level', label: 'Below %', type: 'number', min: 1, max: 100, default: '20' },
+            SPEED_ABOVE: { param: 'speed', label: 'Above km/h', type: 'number', min: 1, max: 200, default: '80' },
+            SPEED_BELOW: { param: 'speed', label: 'Below km/h', type: 'number', min: 1, max: 200, default: '10' },
+            SYSTEM_BOOT: {}, SUNRISE: {}, SUNSET: {}
+        };
+        const ACTION_CONFIG = {
+            AC_ON: { params: {}, label: 'Turn AC on' },
+            AC_OFF: { params: {}, label: 'Turn AC off' },
+            SET_AC_TEMPERATURE: { params: { temp: { type: 'number', min: 16, max: 30, default: '22' } }, label: 'Set AC temperature' },
+            SET_READING_LIGHT: { params: { state: { type: 'choice', options: [['1','On'],['0','Off']], default: '1' } }, label: 'Reading light' },
+            SET_HEADLIGHT_LEVEL: { params: { level: { type: 'number', min: 1, max: 11, default: '6' } }, label: 'Headlamp height' },
+            TAILGATE_OPEN: { params: {}, label: 'Open tailgate' },
+            TAILGATE_CLOSE: { params: {}, label: 'Close tailgate' }
+        };
+        let createAutomationActions = [];
+        
         function showCreateAutomation() {
-            // TODO: Implement automation creation UI
-            alert('Automation creation coming soon!');
+            document.getElementById('createAutomationName').value = '';
+            document.getElementById('createAutomationTrigger').value = 'TIME_OF_DAY';
+            createAutomationActions = [{ type: 'AC_ON', params: Object.fromEntries(Object.entries(ACTION_CONFIG.AC_ON.params || {}).map(([k,v]) => [k, v.default || (v.options && v.options[0] ? v.options[0][0] : '')])) }];
+            updateCreateTriggerParams();
+            renderCreateActions();
+            document.getElementById('createAutomationModal').style.display = 'flex';
+        }
+        
+        function closeCreateAutomation() {
+            document.getElementById('createAutomationModal').style.display = 'none';
+        }
+        
+        function updateCreateTriggerParams() {
+            const type = document.getElementById('createAutomationTrigger').value;
+            const cfg = TRIGGER_CONFIG[type] || {};
+            const container = document.getElementById('createAutomationTriggerParams');
+            if (!cfg.param) { container.innerHTML = ''; return; }
+            if (cfg.type === 'time') {
+                container.innerHTML = `<input type="time" id="createTriggerParam_${cfg.param}" value="${cfg.default || '08:00'}" style="width:100%;padding:12px;border-radius:8px;border:1px solid #2a3d4d;background:#111b23;color:#F1F3F6;">`;
+            } else if (cfg.type === 'number') {
+                container.innerHTML = `<input type="number" id="createTriggerParam_${cfg.param}" value="${cfg.default || ''}" min="${cfg.min||0}" max="${cfg.max||999}" placeholder="${cfg.label}" style="width:100%;padding:12px;border-radius:8px;border:1px solid #2a3d4d;background:#111b23;color:#F1F3F6;">`;
+            } else { container.innerHTML = ''; }
+        }
+        
+        function addCreateAction() {
+            createAutomationActions.push({ type: 'AC_ON', params: {} });
+            renderCreateActions();
+        }
+        
+        function removeCreateAction(i) {
+            createAutomationActions.splice(i, 1);
+            renderCreateActions();
+        }
+        
+        function updateCreateActionType(i, type) {
+            const cfg = ACTION_CONFIG[type] || {};
+            const params = {};
+            for (const [k, v] of Object.entries(cfg.params || {})) {
+                if (v.default !== undefined) params[k] = String(v.default);
+                else if (v.options && v.options[0]) params[k] = v.options[0][0];
+            }
+            createAutomationActions[i] = { type, params };
+            renderCreateActions();
+        }
+        
+        function updateCreateActionParam(i, key, val) {
+            if (!createAutomationActions[i].params) createAutomationActions[i].params = {};
+            createAutomationActions[i].params[key] = val;
+        }
+        
+        function renderCreateActions() {
+            const container = document.getElementById('createAutomationActions');
+            container.innerHTML = createAutomationActions.map((a, i) => {
+                const cfg = ACTION_CONFIG[a.type] || { params: {}, label: a.type };
+                let paramHtml = '';
+                for (const [k, v] of Object.entries(cfg.params || {})) {
+                    if (v.type === 'number') {
+                        const val = a.params[k] !== undefined ? a.params[k] : (v.default || '');
+                        paramHtml += `<input type="number" data-i="${i}" data-k="${k}" onchange="updateCreateActionParam(${i},'${k}',this.value)" value="${val}" min="${v.min}" max="${v.max}" placeholder="${k}" style="flex:0 0 80px;padding:8px;border-radius:6px;border:1px solid #2a3d4d;background:#111b23;color:#F1F3F6;">`;
+                    } else if (v.type === 'choice') {
+                        const def = a.params[k] !== undefined ? a.params[k] : (v.default || (v.options && v.options[0] ? v.options[0][0] : ''));
+                        const opts = (v.options || []).map(([val,lab]) => `<option value="${val}" ${val===def?'selected':''}>${lab}</option>`).join('');
+                        paramHtml += `<select data-i="${i}" data-k="${k}" onchange="updateCreateActionParam(${i},'${k}',this.value)" style="flex:0 0 80px;padding:8px;border-radius:6px;border:1px solid #2a3d4d;background:#111b23;color:#F1F3F6;">${opts}</select>`;
+                    }
+                }
+                return `<div class="action-item">
+                    <select onchange="updateCreateActionType(${i}, this.value)" style="flex:1;padding:8px;border-radius:6px;border:1px solid #2a3d4d;background:#111b23;color:#F1F3F6;">
+                        ${Object.entries(ACTION_CONFIG).map(([t,c]) => `<option value="${t}" ${a.type===t?'selected':''}>${c.label}</option>`).join('')}
+                    </select>
+                    ${paramHtml}
+                    <button type="button" class="remove-action" onclick="removeCreateAction(${i})" ${createAutomationActions.length<=1?'disabled':''}>×</button>
+                </div>`;
+            }).join('');
+        }
+        
+        function saveCreateAutomation() {
+            const name = document.getElementById('createAutomationName').value.trim();
+            if (!name) { showError('Please enter a name'); return; }
+            const triggerType = document.getElementById('createAutomationTrigger').value;
+            const cfg = TRIGGER_CONFIG[triggerType] || {};
+            const params = {};
+            if (cfg.param) {
+                const el = document.getElementById('createTriggerParam_' + cfg.param);
+                if (el) params[cfg.param] = el.value || cfg.default || '';
+                if (cfg.param === 'time') params.timeLabel = params.time || params[cfg.param];
+            }
+            const trigger = { type: triggerType, parameters: params };
+            const triggerGroup = {
+                id: 'tg_' + Date.now(),
+                operator: 'AND',
+                triggers: [trigger],
+                childGroupIds: [],
+                parentGroupId: null
+            };
+            const actions = createAutomationActions.map((a, i) => {
+                const cfg = ACTION_CONFIG[a.type];
+                const p = { ...a.params };
+                if (cfg && cfg.params) {
+                    for (const [k, v] of Object.entries(cfg.params)) {
+                        const sel = document.querySelector(`[data-i="${i}"][data-k="${k}"]`);
+                        if (sel) p[k] = sel.value || (v.default !== undefined ? String(v.default) : '');
+                        else if (p[k] === undefined && v.default !== undefined) p[k] = String(v.default);
+                        else if (p[k] === undefined && v.options && v.options[0]) p[k] = v.options[0][0];
+                    }
+                }
+                return {
+                    id: 'action_' + Date.now() + '_' + i,
+                    type: a.type,
+                    parameters: p,
+                    parameterSources: {},
+                    delayMs: 0,
+                    childActions: [],
+                    elseActions: [],
+                    nestingLevel: 0,
+                    condition: null,
+                    conditionGroups: []
+                };
+            });
+            const automation = {
+                name,
+                description: null,
+                enabled: true,
+                triggers: [],
+                constraints: [],
+                triggerGroups: [triggerGroup],
+                constraintGroups: [],
+                actions
+            };
+            pendingAutomations.push(automation);
+            localStorage.setItem('pending_automations', JSON.stringify(pendingAutomations));
+            closeCreateAutomation();
+            if (currentPage === 'automations') loadAutomations();
+            const msg = document.getElementById('errorMessage');
+            msg.textContent = 'Automation added. Will sync when connected.';
+            msg.style.background = '#2e7d32';
+            msg.style.display = 'block';
+            setTimeout(() => { msg.style.display = 'none'; msg.style.background = ''; }, 3000);
         }
         
         // Sync pending automations when connected
@@ -1523,12 +1915,12 @@
                     
                     <div class="naming-field">
                         <label>Name your car</label>
-                        <input type="text" id="carNameInput" placeholder="e.g. BYD Seal" value="${qrData.defaultCarName}" maxlength="30">
+                        <input type="text" id="carNameInput" placeholder="e.g. My BYD Seal" value="${qrData.defaultCarName}" maxlength="30">
                     </div>
                     
                     <div class="naming-field">
                         <label>Your device name</label>
-                        <input type="text" id="deviceNameInput" placeholder="e.g. John's iPhone" value="${existingDeviceName || ''}" maxlength="30">
+                        <input type="text" id="deviceNameInput" placeholder="e.g. Dhruv's iPhone" value="${existingDeviceName || ''}" maxlength="30">
                         <span class="naming-hint">This name will appear in Commander app</span>
                     </div>
                     
