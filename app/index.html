@@ -2550,7 +2550,7 @@
                         break;
                     case 'setAcTemperature':
                         command = 'ac';
-                        commandParams = { on: true, temp: params.temperature };
+                        commandParams = { on: true, temp: params.temperature, zone: params.zone ?? 0 };
                         break;
                     case 'setAcFanSpeed':
                         command = 'ac';
