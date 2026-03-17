@@ -1096,17 +1096,7 @@
             </div>
         </div>
         
-        <!-- Send Notification -->
-        <div class="control-section">
-            <div class="section-title">Send Notification</div>
-            <p class="status-label" style="margin-bottom: 8px;">Send a note to appear as a popup on the car screen</p>
-            <div style="display: flex; gap: 8px; align-items: stretch;">
-                <input type="text" id="notificationMessage" placeholder="Type your message..." maxlength="200" onkeydown="if(event.key==='Enter')sendNotificationToCar()" style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #2a3d4d; background: #111b23; color: #F1F3F6; font-size: 14px;">
-                <button onclick="sendNotificationToCar()" style="padding: 12px 20px; border-radius: 8px; background: #2196F3; color: #fff; border: none; font-weight: 600; cursor: pointer; white-space: nowrap;">Send</button>
-            </div>
-        </div>
-        
-        <!-- Quick Controls -->
+<!-- Quick Controls -->
         <div class="control-section">
             <div class="section-title">Quick Controls</div>
             <div class="button-group">
@@ -1196,6 +1186,16 @@
                     <button onclick="setSeatVentilation('passenger', 1)">1</button>
                     <button onclick="setSeatVentilation('passenger', 2)">2</button>
                 </div>
+            </div>
+        </div>
+        
+        <!-- Send Notification -->
+        <div class="control-section">
+            <div class="section-title">Send Notification</div>
+            <p class="status-label" style="margin-bottom: 8px;">Send a note to appear as a popup on the car screen</p>
+            <div style="display: flex; gap: 8px; align-items: stretch;">
+                <input type="text" id="notificationMessage" placeholder="Type your message..." maxlength="200" onkeydown="if(event.key==='Enter')sendNotificationToCar()" style="flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #2a3d4d; background: #111b23; color: #F1F3F6; font-size: 14px;">
+                <button onclick="sendNotificationToCar()" style="padding: 12px 20px; border-radius: 8px; background: #2196F3; color: #fff; border: none; font-weight: 600; cursor: pointer; white-space: nowrap;">Send</button>
             </div>
         </div>
         </div><!-- End homePage -->
