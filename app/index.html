@@ -324,6 +324,13 @@
         .icon-button.retry-button:hover {
             background: #1F8AFF22;
         }
+        .icon-button.delete-button {
+            border-color: #c62828;
+            color: #ef5350;
+        }
+        .icon-button.delete-button:hover {
+            background: #c6282822;
+        }
         
         /* Automations Page */
         .page-header {
@@ -1622,22 +1629,24 @@
                     <div class="automation-card">
                         <div class="automation-card-header">
                             <span class="automation-name">${escapeHtml(auto.name || 'Automation ' + (index + 1))}</span>
-                            <div style="display: flex; gap: 8px; align-items: center;">
-                                ${canToggle ? `
-                                <label class="automation-toggle">
-                                    <input type="checkbox" ${auto.enabled ? 'checked' : ''} onchange="toggleAutomation(${auto.id}, this.checked)">
-                                    <span class="slider"></span>
-                                </label>
-                                <button class="icon-button" onclick="deleteAutomation(${auto.id}, '${escapeHtml(auto.name).replace(/'/g, "\\'")}')" title="Delete automation">
-                                    <svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px;">
-                                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                                    </svg>
-                                </button>
-                                ` : '<span class="automation-badge">Synced</span>'}
-                            </div>
+                            ${canToggle ? `
+                            <button class="icon-button delete-button" onclick="deleteAutomation(${auto.id}, '${escapeHtml(auto.name).replace(/'/g, "\\'")}')" title="Delete automation">
+                                <svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px;">
+                                    <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                                </svg>
+                            </button>
+                            ` : '<span class="automation-badge">Synced</span>'}
                         </div>
                         <div class="automation-trigger">Trigger: ${formatTrigger(auto.trigger)}</div>
                         <div class="automation-actions-count">${auto.actions?.length || 0} action(s)</div>
+                        ${canToggle ? `
+                        <div style="margin-top: 12px;">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="checkbox" ${auto.enabled ? 'checked' : ''} onchange="toggleAutomation(${auto.id}, this.checked)" style="width: 18px; height: 18px; cursor: pointer;">
+                                <span style="color: #9AA3AF; font-size: 14px;">${auto.enabled ? 'Enabled' : 'Disabled'}</span>
+                            </label>
+                        </div>
+                        ` : ''}
                     </div>
                 `).join('');
             }
@@ -1764,7 +1773,7 @@
                 <div class="automation-card">
                     <div class="automation-card-header">
                         <span class="automation-name">${auto.name || 'New Automation'}</span>
-                        <button class="icon-button" onclick="removePendingAutomation(${index})">
+                        <button class="icon-button delete-button" onclick="removePendingAutomation(${index})" title="Delete pending automation">
                             <svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px;">
                                 <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
                             </svg>
