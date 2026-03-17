@@ -125,6 +125,11 @@
             border-radius: 12px;
             padding: 16px;
             margin-bottom: 16px;
+            transition: opacity 0.3s;
+        }
+        .control-section.disabled {
+            opacity: 0.4;
+            pointer-events: none;
         }
         .section-title {
             font-size: 18px;
@@ -429,7 +434,7 @@
             height: 23px;
             width: 23px;
             left: 4px;
-            top: 4px;
+            top: 2px;
             background-color: #ffffff;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             border-radius: 50%;
@@ -1646,25 +1651,21 @@
                         <div class="automation-card-header">
                             <span class="automation-name">${escapeHtml(auto.name || 'Automation ' + (index + 1))}</span>
                             ${canToggle ? `
-                            <button class="icon-button delete-button" onclick="deleteAutomation(${auto.id}, '${escapeHtml(auto.name).replace(/'/g, "\\'")}')" title="Delete automation">
-                                <svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px;">
-                                    <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                                </svg>
-                            </button>
+                            <div style="display: flex; gap: 12px; align-items: center;">
+                                <label class="automation-toggle">
+                                    <input type="checkbox" ${auto.enabled ? 'checked' : ''} onchange="toggleAutomation(${auto.id}, this.checked)">
+                                    <span class="slider"></span>
+                                </label>
+                                <button class="icon-button delete-button" onclick="deleteAutomation(${auto.id}, '${escapeHtml(auto.name).replace(/'/g, "\\'")}')" title="Delete automation">
+                                    <svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px;">
+                                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                                    </svg>
+                                </button>
+                            </div>
                             ` : '<span class="automation-badge">Synced</span>'}
                         </div>
-                        <div class="automation-card-body">
-                            <div class="automation-card-info">
-                                <div class="automation-trigger">Trigger: ${formatTrigger(auto.trigger)}</div>
-                                <div class="automation-actions-count">${auto.actions?.length || 0} action(s)</div>
-                            </div>
-                            ${canToggle ? `
-                            <label class="automation-toggle">
-                                <input type="checkbox" ${auto.enabled ? 'checked' : ''} onchange="toggleAutomation(${auto.id}, this.checked)">
-                                <span class="slider"></span>
-                            </label>
-                            ` : ''}
-                        </div>
+                        <div class="automation-trigger">Trigger: ${formatTrigger(auto.trigger)}</div>
+                        <div class="automation-actions-count">${auto.actions?.length || 0} action(s)</div>
                     </div>
                 `).join('');
             }
@@ -2705,6 +2706,20 @@
         // Connection status (for debug logging only)
         function updateConnectionStatus(connected) {
             debugLog(connected ? 'Connection status: CONNECTED' : 'Connection status: DISCONNECTED');
+            updateControlsState(connected);
+        }
+        
+        function updateControlsState(connected) {
+            const homePage = document.getElementById('homePage');
+            if (!homePage) return;
+            const controlSections = homePage.querySelectorAll('.control-section');
+            controlSections.forEach(section => {
+                if (connected) {
+                    section.classList.remove('disabled');
+                } else {
+                    section.classList.add('disabled');
+                }
+            });
         }
         
         // Error display
