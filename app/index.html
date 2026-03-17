@@ -1009,7 +1009,7 @@
             <div id="deviceInfo" class="device-info">
                 <div>
                     <div class="device-name-container">
-                        <span id="deviceName" class="device-name">Car Connected</span>
+                        <span id="deviceName" class="device-name">Connected Car</span>
                         <button class="edit-name-btn" onclick="editCarName()" title="Edit name">
                             <svg viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
@@ -1201,7 +1201,7 @@
             
             <div id="offlineAutomations" class="offline-section" style="display: none;">
                 <div class="section-title">Pending Sync</div>
-                <div class="offline-notice">These automations will sync when the car is online</div>
+                <div class="offline-notice">These automations will sync when the car comes online</div>
                 <div id="pendingAutomationsList"></div>
             </div>
         </div>
@@ -2071,11 +2071,24 @@
                     throw new Error('Failed to get TURN credentials');
                 }
                 const credData = await credRes.json();
+                // Prefer TURNS/443 first for remote connectivity (cellular/corporate firewalls)
+                if (credData.iceServers) {
+                    credData.iceServers = credData.iceServers.map(server => {
+                        const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+                        const sorted = [...urls].sort((a, b) => {
+                            const prefers443 = u => (u || '').includes('443') ? 0 : 1;
+                            const prefersTurns = u => (u || '').toLowerCase().startsWith('turns:') ? 0 : 1;
+                            if (prefersTurns(a) !== prefersTurns(b)) return prefersTurns(a) - prefersTurns(b);
+                            return prefers443(a) - prefers443(b);
+                        });
+                        return { ...server, urls: sorted.length === 1 ? sorted[0] : sorted };
+                    });
+                }
                 const rtcConfig = {
                     ...credData,
                     iceTransportPolicy: 'relay'
                 };
-                console.log('TURN credentials received');
+                console.log('TURN credentials received (TURNS/443 preferred for remote)');
                 
                 createPeerConnection(rtcConfig);
                 
