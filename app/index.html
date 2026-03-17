@@ -111,6 +111,15 @@
             font-weight: bold;
             color: #1F8AFF;
         }
+        .status-grid.last-known .status-value {
+            color: #6B7280;
+            font-weight: 600;
+        }
+        .status-grid .last-known-hint {
+            font-size: 10px;
+            color: #6B7280;
+            margin-top: 2px;
+        }
         .control-section {
             background: #18273c;
             border-radius: 12px;
@@ -1047,7 +1056,7 @@
             </button>
         </div>
         <!-- Status Cards -->
-        <div class="status-grid">
+        <div class="status-grid" id="statusGrid">
             <div class="status-card">
                 <div class="status-label">Speed</div>
                 <div class="status-value" id="speedValue">--</div>
@@ -1334,6 +1343,8 @@
             updateConnectionStatus(false);
         }
         
+        const LAST_CAR_STATUS_KEY = 'last_car_status';
+
         function showAppScreen() {
             document.getElementById('scanScreen').style.display = 'none';
             document.getElementById('content').style.display = 'block';
@@ -1345,11 +1356,105 @@
                 document.getElementById('deviceStatus').textContent = useP2P ? 'Connected via P2P' : 'Connecting...';
             }
             
+            // Show last known status when disconnected/reconnecting
+            if (!useP2P) {
+                restoreLastKnownStatus();
+            }
+            
             // Hide retry button on successful connection
             hideRetryButton();
             
             // Initialize map once we're showing the app (fixes blank map)
             setTimeout(initMap, 100);
+        }
+
+        function getLastStatusKey() {
+            return connectionInfo?.deviceToken ? `${LAST_CAR_STATUS_KEY}_${connectionInfo.deviceToken}` : LAST_CAR_STATUS_KEY;
+        }
+
+        function saveLastKnownStatus(data) {
+            if (!data || !connectionInfo) return;
+            try {
+                const toSave = {
+                    speed: data.speed,
+                    soc: data.soc,
+                    evRange: data.evRange,
+                    mileage: data.mileage ? { total: data.mileage.total } : null,
+                    location: data.location ? { lat: data.location.lat, lng: data.location.lng } : null,
+                    savedAt: Date.now()
+                };
+                localStorage.setItem(getLastStatusKey(), JSON.stringify(toSave));
+            } catch (e) {}
+        }
+
+        function restoreLastKnownStatus() {
+            try {
+                const key = getLastStatusKey();
+                const raw = localStorage.getItem(key);
+                if (!raw) return;
+                const data = JSON.parse(raw);
+                const grid = document.getElementById('statusGrid');
+                if (!grid) return;
+                let hasData = false;
+                if (data.speed !== undefined && data.speed !== null) {
+                    document.getElementById('speedValue').textContent = Math.round(data.speed) + ' km/h';
+                    hasData = true;
+                }
+                if (data.soc !== undefined && data.soc !== null) {
+                    document.getElementById('socValue').textContent = Math.round(data.soc) + '%';
+                    hasData = true;
+                }
+                if (data.evRange !== undefined && data.evRange !== null) {
+                    document.getElementById('evRangeValue').textContent = Math.round(data.evRange) + ' km';
+                    hasData = true;
+                }
+                if (data.mileage && data.mileage.total !== undefined && data.mileage.total !== null) {
+                    document.getElementById('totalMileageValue').textContent = Math.round(data.mileage.total) + ' km';
+                    hasData = true;
+                }
+                if (data.location && data.location.lat && data.location.lng) {
+                    setTimeout(() => updateCarLocation(data.location.lat, data.location.lng), 250);
+                    hasData = true;
+                }
+                if (hasData) {
+                    grid.classList.add('last-known');
+                    const hints = grid.querySelectorAll('.last-known-hint');
+                    hints.forEach(h => h.remove());
+                    const hint = document.createElement('div');
+                    hint.className = 'last-known-hint';
+                    hint.textContent = 'Last known';
+                    hint.style.gridColumn = '1 / -1';
+                    hint.style.textAlign = 'center';
+                    grid.appendChild(hint);
+                }
+            } catch (e) {}
+        }
+
+        function clearLastKnownIndicator() {
+            const grid = document.getElementById('statusGrid');
+            if (grid) {
+                grid.classList.remove('last-known');
+                grid.querySelectorAll('.last-known-hint').forEach(h => h.remove());
+            }
+        }
+
+        function showLastKnownIndicator() {
+            const grid = document.getElementById('statusGrid');
+            if (!grid || grid.querySelector('.last-known-hint')) return;
+            const speed = document.getElementById('speedValue')?.textContent;
+            const soc = document.getElementById('socValue')?.textContent;
+            const evRange = document.getElementById('evRangeValue')?.textContent;
+            const mileage = document.getElementById('totalMileageValue')?.textContent;
+            const hasAny = [speed, soc, evRange, mileage].some(v => v && v !== '--' && v !== '--%' && v !== '-- km');
+            if (hasAny) {
+                grid.classList.add('last-known');
+                const hint = document.createElement('div');
+                hint.className = 'last-known-hint';
+                hint.textContent = 'Last known';
+                hint.style.gridColumn = '1 / -1';
+                hint.style.textAlign = 'center';
+                grid.appendChild(hint);
+            }
         }
         
         // Menu functions
@@ -1838,7 +1943,10 @@
                 { facingMode: "environment" },
                 {
                     fps: 10,
-                    qrbox: { width: 250, height: 250 }
+                    qrbox: (viewfinderWidth, viewfinderHeight) => {
+                        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                        return { width: minEdge, height: minEdge };
+                    }
                 },
                 onScanSuccess,
                 onScanFailure
@@ -2229,6 +2337,7 @@
                 } else if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected') {
                     updateConnectionStatus(false);
                     document.getElementById('deviceStatus').textContent = 'Disconnected';
+                    showLastKnownIndicator();
                     showRetryButton();
                 }
             };
@@ -2273,6 +2382,7 @@
                 document.getElementById('deviceStatus').textContent = 'Disconnected';
                 stopDataUpdates();
                 stopPing();
+                showLastKnownIndicator();
                 showRetryButton();
             };
             
@@ -2725,6 +2835,9 @@
         function updateUI(data) {
             if (!data) return;
             
+            clearLastKnownIndicator();
+            saveLastKnownStatus(data);
+
             // Update status cards
             if (data.speed !== undefined) {
                 document.getElementById('speedValue').textContent = Math.round(data.speed) + ' km/h';
