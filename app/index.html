@@ -379,6 +379,10 @@
             display: flex;
             flex-direction: column;
         }
+        .automation-card.pending-deletion {
+            opacity: 0.5;
+            border: 1px solid #d32f2f;
+        }
         .automation-card-header {
             display: flex;
             justify-content: space-between;
@@ -1619,6 +1623,7 @@
         // Automations functions
         let automations = [];
         let pendingAutomations = JSON.parse(localStorage.getItem('pending_automations') || '[]');
+        let pendingDeletions = JSON.parse(localStorage.getItem('pending_deletions') || '[]');
         const CACHED_AUTOMATIONS_KEY = 'cached_automations';
         const CACHED_AUTOMATIONS_TIME_KEY = 'cached_automations_time';
         const CACHE_DEVICE_KEY = 'cached_automations_device';
@@ -1664,17 +1669,20 @@
             if (!list || list.length === 0) {
                 listEl.innerHTML = '<div class="no-automations">No automations configured</div>';
             } else {
-                listEl.innerHTML = list.map((auto, index) => `
-                    <div class="automation-card">
+                listEl.innerHTML = list.map((auto, index) => {
+                    const isPendingDeletion = pendingDeletions.some(d => d.id === auto.id);
+                    return `
+                    <div class="automation-card ${isPendingDeletion ? 'pending-deletion' : ''}">
                         <div class="automation-card-header">
                             <span class="automation-name">${escapeHtml(auto.name || 'Automation ' + (index + 1))}</span>
                             ${canToggle ? `
                             <div style="display: flex; gap: 12px; align-items: center;">
+                                ${isPendingDeletion ? '<span class="automation-badge" style="background: #d32f2f;">Pending deletion</span>' : ''}
                                 <label class="automation-toggle">
-                                    <input type="checkbox" ${auto.enabled ? 'checked' : ''} onchange="toggleAutomation(${auto.id}, this.checked)">
+                                    <input type="checkbox" ${auto.enabled ? 'checked' : ''} onchange="toggleAutomation(${auto.id}, this.checked)" ${isPendingDeletion ? 'disabled' : ''}>
                                     <span class="slider"></span>
                                 </label>
-                                <button class="icon-button delete-button" onclick="deleteAutomation(${auto.id}, '${escapeHtml(auto.name).replace(/'/g, "\\'")}')" title="Delete automation">
+                                <button class="icon-button delete-button" onclick="deleteAutomation(${auto.id}, '${escapeHtml(auto.name).replace(/'/g, "\\'")}')" title="Delete automation" ${isPendingDeletion ? 'disabled' : ''}>
                                     <svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px;">
                                         <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
                                     </svg>
@@ -1682,10 +1690,11 @@
                             </div>
                             ` : '<span class="automation-badge">Synced</span>'}
                         </div>
-                        <div class="automation-trigger">Trigger: ${formatTrigger(auto.trigger)}</div>
+                        <div class="automation-trigger">Trigger: ${formatTrigger(auto.trigger || (auto.triggers && auto.triggers[0]))}</div>
                         <div class="automation-actions-count">${auto.actions?.length || 0} action(s)</div>
                     </div>
-                `).join('');
+                `;
+                }).join('');
             }
             showPendingAutomations();
         }
@@ -1786,6 +1795,24 @@
         
         async function deleteAutomation(id, name) {
             if (!confirm(`Delete automation "${name}"? This cannot be undone.`)) return;
+            
+            // Check if connected
+            if (!useP2P || !dataChannel || dataChannel.readyState !== 'open') {
+                // Not connected - add to pending deletions
+                pendingDeletions.push({ id, name });
+                localStorage.setItem('pending_deletions', JSON.stringify(pendingDeletions));
+                
+                const msg = document.getElementById('errorMessage');
+                msg.textContent = 'Deletion queued. Will sync when connected.';
+                msg.style.background = '#2e7d32';
+                msg.style.display = 'block';
+                setTimeout(() => { msg.style.display = 'none'; msg.style.background = ''; }, 3000);
+                
+                if (currentPage === 'automations') loadAutomations();
+                return;
+            }
+            
+            // Connected - delete immediately
             try {
                 const result = await sendP2PRequest('DELETE', `/api/automations/${id}`);
                 if (result?.body?.success) {
@@ -1810,32 +1837,67 @@
             const section = document.getElementById('offlineAutomations');
             const listEl = document.getElementById('pendingAutomationsList');
             
-            if (pendingAutomations.length === 0) {
+            if (pendingAutomations.length === 0 && pendingDeletions.length === 0) {
                 section.style.display = 'none';
                 return;
             }
             
             section.style.display = 'block';
-            listEl.innerHTML = pendingAutomations.map((auto, index) => `
-                <div class="automation-card">
-                    <div class="automation-card-header">
-                        <span class="automation-name">${auto.name || 'New Automation'}</span>
-                        <button class="icon-button delete-button" onclick="removePendingAutomation(${index})" title="Delete pending automation">
-                            <svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px;">
-                                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                            </svg>
-                        </button>
+            
+            let html = '';
+            
+            // Show pending creations
+            if (pendingAutomations.length > 0) {
+                html += pendingAutomations.map((auto, index) => `
+                    <div class="automation-card">
+                        <div class="automation-card-header">
+                            <span class="automation-name">${auto.name || 'New Automation'}</span>
+                            <button class="icon-button delete-button" onclick="removePendingAutomation(${index})" title="Delete pending automation">
+                                <svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px;">
+                                    <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="automation-trigger">Trigger: ${formatTrigger(auto.trigger || (auto.triggers && auto.triggers[0]))}</div>
+                        <div class="automation-actions-count">${auto.actions?.length || 0} action(s)</div>
                     </div>
-                    <div class="automation-trigger">Trigger: ${formatTrigger(auto.trigger)}</div>
-                    <div class="automation-actions-count">${auto.actions?.length || 0} action(s)</div>
-                </div>
-            `).join('');
+                `).join('');
+            }
+            
+            // Show pending deletions
+            if (pendingDeletions.length > 0) {
+                html += pendingDeletions.map((deletion, index) => `
+                    <div class="automation-card pending-deletion">
+                        <div class="automation-card-header">
+                            <span class="automation-name">${deletion.name || 'Automation'}</span>
+                            <div style="display: flex; gap: 12px; align-items: center;">
+                                <span class="automation-badge" style="background: #d32f2f;">Pending deletion</span>
+                                <button class="icon-button delete-button" onclick="removePendingDeletion(${index})" title="Cancel deletion">
+                                    <svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px;">
+                                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="automation-trigger" style="opacity: 0.6;">Will be deleted when connected</div>
+                    </div>
+                `).join('');
+            }
+            
+            listEl.innerHTML = html;
         }
         
         function removePendingAutomation(index) {
             pendingAutomations.splice(index, 1);
             localStorage.setItem('pending_automations', JSON.stringify(pendingAutomations));
             showPendingAutomations();
+        }
+        
+        function removePendingDeletion(index) {
+            pendingDeletions.splice(index, 1);
+            localStorage.setItem('pending_deletions', JSON.stringify(pendingDeletions));
+            showPendingAutomations();
+            if (currentPage === 'automations') loadAutomations();
         }
         
         // Simplified automation builder - extensible for future advanced triggers/actions
@@ -2065,35 +2127,74 @@
                 constraintGroups: [],
                 actions
             };
-            pendingAutomations.push(automation);
-            localStorage.setItem('pending_automations', JSON.stringify(pendingAutomations));
+            
             closeCreateAutomation();
-            if (currentPage === 'automations') loadAutomations();
-            const msg = document.getElementById('errorMessage');
-            msg.textContent = 'Automation added. Will sync when connected.';
-            msg.style.background = '#2e7d32';
-            msg.style.display = 'block';
-            setTimeout(() => { msg.style.display = 'none'; msg.style.background = ''; }, 3000);
+            
+            // Check if connected - sync immediately or add to pending
+            if (useP2P && dataChannel && dataChannel.readyState === 'open') {
+                // Connected - sync immediately
+                (async () => {
+                    try {
+                        await sendP2PRequest('POST', '/api/automations/create', automation);
+                        if (currentPage === 'automations') loadAutomations();
+                        const msg = document.getElementById('errorMessage');
+                        msg.textContent = 'Automation created successfully';
+                        msg.style.background = '#2e7d32';
+                        msg.style.display = 'block';
+                        setTimeout(() => { msg.style.display = 'none'; msg.style.background = ''; }, 3000);
+                    } catch (err) {
+                        console.error('Failed to create automation:', err);
+                        showError('Failed to create automation: ' + (err?.message || 'Unknown error'));
+                    }
+                })();
+            } else {
+                // Not connected - add to pending
+                pendingAutomations.push(automation);
+                localStorage.setItem('pending_automations', JSON.stringify(pendingAutomations));
+                if (currentPage === 'automations') loadAutomations();
+                const msg = document.getElementById('errorMessage');
+                msg.textContent = 'Automation added. Will sync when connected.';
+                msg.style.background = '#2e7d32';
+                msg.style.display = 'block';
+                setTimeout(() => { msg.style.display = 'none'; msg.style.background = ''; }, 3000);
+            }
         }
         
         // Sync pending automations when connected
         async function syncPendingAutomations() {
-            if (pendingAutomations.length === 0) return;
+            if (pendingAutomations.length === 0 && pendingDeletions.length === 0) return;
             if (!useP2P || !dataChannel || dataChannel.readyState !== 'open') return;
             
-            console.log('Syncing', pendingAutomations.length, 'pending automations...');
-            
-            for (let i = pendingAutomations.length - 1; i >= 0; i--) {
-                try {
-                    await sendP2PRequest('POST', '/api/automations/create', pendingAutomations[i]);
-                    pendingAutomations.splice(i, 1);
-                    console.log('Synced automation', i);
-                } catch (err) {
-                    console.error('Failed to sync automation', i, err);
+            // Sync deletions first
+            if (pendingDeletions.length > 0) {
+                console.log('Syncing', pendingDeletions.length, 'pending deletions...');
+                for (let i = pendingDeletions.length - 1; i >= 0; i--) {
+                    try {
+                        const deletion = pendingDeletions[i];
+                        await sendP2PRequest('DELETE', `/api/automations/${deletion.id}`);
+                        pendingDeletions.splice(i, 1);
+                        console.log('Synced deletion for automation:', deletion.name);
+                    } catch (err) {
+                        console.error('Failed to sync deletion', i, err);
+                    }
                 }
+                localStorage.setItem('pending_deletions', JSON.stringify(pendingDeletions));
             }
             
-            localStorage.setItem('pending_automations', JSON.stringify(pendingAutomations));
+            // Sync creations
+            if (pendingAutomations.length > 0) {
+                console.log('Syncing', pendingAutomations.length, 'pending automations...');
+                for (let i = pendingAutomations.length - 1; i >= 0; i--) {
+                    try {
+                        await sendP2PRequest('POST', '/api/automations/create', pendingAutomations[i]);
+                        pendingAutomations.splice(i, 1);
+                        console.log('Synced automation', i);
+                    } catch (err) {
+                        console.error('Failed to sync automation', i, err);
+                    }
+                }
+                localStorage.setItem('pending_automations', JSON.stringify(pendingAutomations));
+            }
             
             if (currentPage === 'automations') {
                 loadAutomations();
