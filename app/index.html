@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Commander Companion">
-    <meta name="app-version" content="1">
+    <meta name="app-version" content="2">
     <title>Commander Companion</title>
     <link rel="manifest" href="/app/manifest.json">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -1410,10 +1410,23 @@
             
             // Check for app update (bookmarked users may have old cached version)
             checkForUpdate();
+            
+            // Check for updates periodically (every 5 minutes)
+            setInterval(checkForUpdate, 5 * 60 * 1000);
         });
         
         function applyUpdate() {
-            location.reload(true);
+            // Clear all caches except connection info
+            const keysToPreserve = ['connection_info', 'device_token', 'user_id'];
+            const allKeys = Object.keys(localStorage);
+            allKeys.forEach(key => {
+                if (!keysToPreserve.includes(key)) {
+                    localStorage.removeItem(key);
+                }
+            });
+            
+            // Force reload with cache bypass
+            window.location.href = window.location.href.split('?')[0] + '?v=' + Date.now();
         }
         
         async function checkForUpdate() {
