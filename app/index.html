@@ -1226,7 +1226,7 @@
             
             <div id="offlineAutomations" class="offline-section" style="display: none;">
                 <div class="section-title">Pending Sync</div>
-                <div class="offline-notice">These automations will sync when the car comes online</div>
+                <div class="offline-notice">These automations will sync when the car is online</div>
                 <div id="pendingAutomationsList"></div>
             </div>
         </div>
@@ -1436,12 +1436,6 @@
                     grid.classList.add('last-known');
                     const hints = grid.querySelectorAll('.last-known-hint');
                     hints.forEach(h => h.remove());
-                    const hint = document.createElement('div');
-                    hint.className = 'last-known-hint';
-                    hint.textContent = 'Last known';
-                    hint.style.gridColumn = '1 / -1';
-                    hint.style.textAlign = 'center';
-                    grid.appendChild(hint);
                 }
             } catch (e) {}
         }
@@ -1464,12 +1458,6 @@
             const hasAny = [speed, soc, evRange, mileage].some(v => v && v !== '--' && v !== '--%' && v !== '-- km');
             if (hasAny) {
                 grid.classList.add('last-known');
-                const hint = document.createElement('div');
-                hint.className = 'last-known-hint';
-                hint.textContent = 'Last known';
-                hint.style.gridColumn = '1 / -1';
-                hint.style.textAlign = 'center';
-                grid.appendChild(hint);
             }
         }
         
@@ -1634,12 +1622,15 @@
                     <div class="automation-card">
                         <div class="automation-card-header">
                             <span class="automation-name">${escapeHtml(auto.name || 'Automation ' + (index + 1))}</span>
-                            ${canToggle ? `
-                            <label class="automation-toggle">
-                                <input type="checkbox" ${auto.enabled ? 'checked' : ''} onchange="toggleAutomation(${auto.id}, this.checked)">
-                                <span class="slider"></span>
-                            </label>
-                            ` : '<span class="automation-badge">Syncing when connected</span>'}
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                ${canToggle ? `
+                                <label class="automation-toggle">
+                                    <input type="checkbox" ${auto.enabled ? 'checked' : ''} onchange="toggleAutomation(${auto.id}, this.checked)">
+                                    <span class="slider"></span>
+                                </label>
+                                <button onclick="deleteAutomation(${auto.id}, '${escapeHtml(auto.name).replace(/'/g, "\\'")}')" style="padding: 6px 12px; border-radius: 6px; background: #d32f2f; color: #fff; border: none; font-size: 12px; cursor: pointer;">Delete</button>
+                                ` : '<span class="automation-badge">Synced</span>'}
+                            </div>
                         </div>
                         <div class="automation-trigger">Trigger: ${formatTrigger(auto.trigger)}</div>
                         <div class="automation-actions-count">${auto.actions?.length || 0} action(s)</div>
@@ -1730,6 +1721,28 @@
                 console.error('Failed to toggle automation:', err);
                 showError('Failed to update automation');
                 loadAutomations(); // Refresh to show correct state
+            }
+        }
+        
+        async function deleteAutomation(id, name) {
+            if (!confirm(`Delete automation "${name}"? This cannot be undone.`)) return;
+            try {
+                const result = await sendP2PRequest('DELETE', `/api/automations/${id}`);
+                if (result?.body?.success) {
+                    loadAutomations();
+                    const errEl = document.getElementById('errorMessage');
+                    if (errEl) {
+                        errEl.textContent = 'Automation deleted';
+                        errEl.style.background = '#2e7d32';
+                        errEl.style.display = 'block';
+                        setTimeout(() => { errEl.style.display = 'none'; errEl.style.background = ''; }, 2000);
+                    }
+                } else {
+                    showError('Failed to delete automation');
+                }
+            } catch (err) {
+                console.error('Failed to delete automation:', err);
+                showError('Failed to delete automation: ' + (err?.message || 'Unknown error'));
             }
         }
         
