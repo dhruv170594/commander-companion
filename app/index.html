@@ -1981,7 +1981,7 @@
             SET_DRIVE_MODE: { params: { mode: { type: 'choice', options: [['0','Eco'],['1','Sport'],['2','Snow']], default: '0' } }, label: 'Set drive mode' },
             
             // Notifications
-            SHOW_NOTIFICATION: { params: { message: { type: 'text', default: '', placeholder: 'Enter message' } }, label: 'Show notification' },
+            SHOW_NOTIFICATION: { params: { title: { type: 'text', default: 'Notification', placeholder: 'Enter title' }, message: { type: 'text', default: '', placeholder: 'Enter message' } }, label: 'Show notification' },
             CLEAR_ALL_NOTIFICATIONS: { params: {}, label: 'Clear all notifications' },
             CLEAR_NOTIFICATIONS_FROM_APP: { params: { packageName: { type: 'text', default: '', placeholder: 'com.example.app' } }, label: 'Clear notifications from app' },
             
@@ -3047,7 +3047,10 @@
             try {
                 const result = await sendP2PRequest('POST', '/api/actions/execute', {
                     type: 'SHOW_NOTIFICATION',
-                    parameters: { message: msg }
+                    parameters: { 
+                        title: 'Companion App Message',
+                        message: msg 
+                    }
                 });
                 const body = result?.body;
                 if (body && body.success) {
