@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -2876,7 +2876,10 @@
             map = L.map('map').setView([0, 0], 15);
             const layer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
-                attribution: '© OpenStreetMap'
+                attribution: '© OpenStreetMap',
+                detectRetina: true,
+                tileSize: 512,
+                zoomOffset: -1
             });
             layer.on('tileerror', function () { console.warn('Map tile failed to load'); });
             layer.addTo(map);
