@@ -2060,35 +2060,53 @@
             return 'Phone';
         }
         
+        // TURN credential cache (55 min - credentials valid 24h, cache shorter for safety)
+        const TURN_CACHE_KEY = 'turn_credentials_cache';
+        const TURN_CACHE_TTL_MS = 55 * 60 * 1000;
+
+        async function getTurnCredentials() {
+            try {
+                const cached = localStorage.getItem(TURN_CACHE_KEY);
+                if (cached) {
+                    const { iceServers, expiresAt } = JSON.parse(cached);
+                    if (iceServers && expiresAt > Date.now()) {
+                        console.log('Using cached TURN credentials (fast path)');
+                        return iceServers;
+                    }
+                }
+            } catch (e) { /* ignore */ }
+            const credRes = await fetch(`${SIGNALING_SERVER}/signaling/turn-credentials`);
+            if (!credRes.ok) throw new Error('Failed to get TURN credentials');
+            const credData = await credRes.json();
+            let iceServers = credData.iceServers || [];
+            iceServers = iceServers.map(server => {
+                const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+                const sorted = [...urls].sort((a, b) => {
+                    const prefers443 = u => (u || '').includes('443') ? 0 : 1;
+                    const prefersTurns = u => (u || '').toLowerCase().startsWith('turns:') ? 0 : 1;
+                    if (prefersTurns(a) !== prefersTurns(b)) return prefersTurns(a) - prefersTurns(b);
+                    return prefers443(a) - prefers443(b);
+                });
+                return { ...server, urls: sorted.length === 1 ? sorted[0] : sorted };
+            });
+            localStorage.setItem(TURN_CACHE_KEY, JSON.stringify({
+                iceServers,
+                expiresAt: Date.now() + TURN_CACHE_TTL_MS
+            }));
+            console.log('TURN credentials fetched and cached');
+            return iceServers;
+        }
+
         // WebRTC P2P Connection using Cloudflare signaling
         async function initP2P() {
             try {
                 console.log('Initializing P2P connection with Cloudflare signaling...');
                 
-                // Fetch short-lived TURN credentials from Cloudflare
-                const credRes = await fetch(`${SIGNALING_SERVER}/signaling/turn-credentials`);
-                if (!credRes.ok) {
-                    throw new Error('Failed to get TURN credentials');
-                }
-                const credData = await credRes.json();
-                // Prefer TURNS/443 first for remote connectivity (cellular/corporate firewalls)
-                if (credData.iceServers) {
-                    credData.iceServers = credData.iceServers.map(server => {
-                        const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
-                        const sorted = [...urls].sort((a, b) => {
-                            const prefers443 = u => (u || '').includes('443') ? 0 : 1;
-                            const prefersTurns = u => (u || '').toLowerCase().startsWith('turns:') ? 0 : 1;
-                            if (prefersTurns(a) !== prefersTurns(b)) return prefersTurns(a) - prefersTurns(b);
-                            return prefers443(a) - prefers443(b);
-                        });
-                        return { ...server, urls: sorted.length === 1 ? sorted[0] : sorted };
-                    });
-                }
+                const iceServers = await getTurnCredentials();
                 const rtcConfig = {
-                    ...credData,
+                    iceServers,
                     iceTransportPolicy: 'relay'
                 };
-                console.log('TURN credentials received (TURNS/443 preferred for remote)');
                 
                 createPeerConnection(rtcConfig);
                 
