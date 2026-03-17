@@ -1148,7 +1148,7 @@
             <div class="window-control" style="margin-top: 12px; display: flex; align-items: center; gap: 8px;">
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                     <input type="checkbox" id="acTempSync" checked onchange="onAcTempSyncChange()">
-                    <span>Sync passenger to driver</span>
+                    <span>Sync passenger to driver temperature</span>
                 </label>
             </div>
             
@@ -1276,13 +1276,31 @@
                 <div class="create-automation-field">
                     <label>When (Trigger)</label>
                     <select id="createAutomationTrigger" onchange="updateCreateTriggerParams()">
-                        <option value="TIME_OF_DAY">At specific time</option>
-                        <option value="BATTERY_LOW">Battery below %</option>
-                        <option value="SPEED_ABOVE">Speed above km/h</option>
-                        <option value="SPEED_BELOW">Speed below km/h</option>
-                        <option value="SYSTEM_BOOT">When car starts</option>
-                        <option value="SUNRISE">At sunrise</option>
-                        <option value="SUNSET">At sunset</option>
+                        <optgroup label="Time">
+                            <option value="TIME_OF_DAY">At specific time</option>
+                            <option value="SUNRISE">At sunrise</option>
+                            <option value="SUNSET">At sunset</option>
+                        </optgroup>
+                        <optgroup label="Vehicle State">
+                            <option value="SYSTEM_BOOT">When car starts</option>
+                            <option value="BATTERY_LOW">Battery below %</option>
+                            <option value="SPEED_ABOVE">Speed above km/h</option>
+                            <option value="SPEED_BELOW">Speed below km/h</option>
+                            <option value="DOOR_OPENED">Door opened</option>
+                            <option value="DOOR_CLOSED">Door closed</option>
+                            <option value="AC_TURNED_ON">AC turned on</option>
+                            <option value="AC_TURNED_OFF">AC turned off</option>
+                        </optgroup>
+                        <optgroup label="Connectivity">
+                            <option value="WIFI_CONNECTED">WiFi connected</option>
+                            <option value="WIFI_DISCONNECTED">WiFi disconnected</option>
+                            <option value="BLUETOOTH_CONNECTED">Bluetooth connected</option>
+                            <option value="BLUETOOTH_DISCONNECTED">Bluetooth disconnected</option>
+                        </optgroup>
+                        <optgroup label="Calls">
+                            <option value="CALL_INCOMING">Call incoming</option>
+                            <option value="CALL_ENDED">Call ended</option>
+                        </optgroup>
                     </select>
                 </div>
                 <div id="createAutomationTriggerParams" class="create-automation-params"></div>
@@ -1740,6 +1758,16 @@
             if (type === 'system_boot') return 'System boot';
             if (type === 'sunrise') return 'Sunrise';
             if (type === 'sunset') return 'Sunset';
+            if (type === 'door_opened') return `${params.areaLabel || params.area || 'Door'} door opened`;
+            if (type === 'door_closed') return `${params.areaLabel || params.area || 'Door'} door closed`;
+            if (type === 'ac_turned_on') return 'AC turned on';
+            if (type === 'ac_turned_off') return 'AC turned off';
+            if (type === 'wifi_connected') return 'WiFi connected';
+            if (type === 'wifi_disconnected') return 'WiFi disconnected';
+            if (type === 'bluetooth_connected') return 'Bluetooth connected';
+            if (type === 'bluetooth_disconnected') return 'Bluetooth disconnected';
+            if (type === 'call_incoming') return 'Call incoming';
+            if (type === 'call_ended') return 'Call ended';
             return trigger.type ? String(trigger.type).replace(/_/g, ' ') : 'Unknown';
         }
         
@@ -1816,14 +1844,68 @@
             BATTERY_LOW: { param: 'level', label: 'Below %', type: 'number', min: 1, max: 100, default: '20' },
             SPEED_ABOVE: { param: 'speed', label: 'Above km/h', type: 'number', min: 1, max: 200, default: '80' },
             SPEED_BELOW: { param: 'speed', label: 'Below km/h', type: 'number', min: 1, max: 200, default: '10' },
-            SYSTEM_BOOT: {}, SUNRISE: {}, SUNSET: {}
+            SYSTEM_BOOT: {},
+            SUNRISE: {},
+            SUNSET: {},
+            DOOR_OPENED: { param: 'area', label: 'Which door', type: 'choice', options: [['1','Driver'],['2','Passenger'],['3','Rear Left'],['4','Rear Right']], default: '1' },
+            DOOR_CLOSED: { param: 'area', label: 'Which door', type: 'choice', options: [['1','Driver'],['2','Passenger'],['3','Rear Left'],['4','Rear Right']], default: '1' },
+            AC_TURNED_ON: {},
+            AC_TURNED_OFF: {},
+            WIFI_CONNECTED: {},
+            WIFI_DISCONNECTED: {},
+            BLUETOOTH_CONNECTED: {},
+            BLUETOOTH_DISCONNECTED: {},
+            CALL_INCOMING: {},
+            CALL_ENDED: {}
         };
         const ACTION_CONFIG = {
-            AC_ON: { params: {}, label: 'Turn AC on' },
-            AC_OFF: { params: {}, label: 'Turn AC off' },
-            SET_AC_TEMPERATURE: { params: { temp: { type: 'number', min: 16, max: 30, default: '22' }, zone: { type: 'choice', options: [['Both','Both'],['Driver Temperature','Driver'],['Passenger Temperature','Passenger']], default: 'Both' } }, label: 'Set AC temperature' },
+            // Climate Control
+            SET_AC_STATE: { params: { state: { type: 'choice', options: [['1','On'],['0','Off']], default: '1' } }, label: 'Set AC state' },
+            SET_AC_TEMPERATURE: { params: { temp: { type: 'number', min: 16, max: 30, default: '22' }, zone: { type: 'choice', options: [['Both','Both'],['Driver','Driver'],['Passenger','Passenger']], default: 'Both' } }, label: 'Set AC temperature' },
+            SET_AC_FAN_LEVEL: { params: { level: { type: 'number', min: 1, max: 7, default: '3' } }, label: 'Set AC fan level' },
+            SET_AC_AUTO_MODE: { params: { enabled: { type: 'choice', options: [['true','On'],['false','Off']], default: 'true' } }, label: 'Set AC auto mode' },
+            SET_SEAT_HEATING: { params: { position: { type: 'choice', options: [['1','Driver'],['2','Passenger']], default: '1' }, level: { type: 'number', min: 0, max: 2, default: '2' } }, label: 'Set seat heating' },
+            SET_SEAT_VENTILATION: { params: { position: { type: 'choice', options: [['1','Driver'],['2','Passenger']], default: '1' }, level: { type: 'number', min: 0, max: 2, default: '2' } }, label: 'Set seat ventilation' },
+            SET_STEERING_WHEEL_HEATING: { params: { state: { type: 'choice', options: [['2','On'],['1','Off']], default: '2' } }, label: 'Steering wheel heating' },
+            
+            // Windows & Sunroof
+            OPEN_WINDOW: { params: { area: { type: 'choice', options: [['1','Driver'],['2','Passenger'],['3','Rear Left'],['4','Rear Right']], default: '1' } }, label: 'Open window' },
+            CLOSE_WINDOW: { params: { area: { type: 'choice', options: [['1','Driver'],['2','Passenger'],['3','Rear Left'],['4','Rear Right']], default: '1' } }, label: 'Close window' },
+            SET_WINDOW_PERCENT: { params: { area: { type: 'choice', options: [['1','Driver'],['2','Passenger'],['3','Rear Left'],['4','Rear Right']], default: '1' }, percent: { type: 'number', min: 0, max: 100, default: '50' } }, label: 'Set window position' },
+            OPEN_ALL_WINDOWS: { params: {}, label: 'Open all windows' },
+            CLOSE_ALL_WINDOWS: { params: {}, label: 'Close all windows' },
+            OPEN_SUNSHADE: { params: {}, label: 'Open sunshade' },
+            CLOSE_SUNSHADE: { params: {}, label: 'Close sunshade' },
+            SET_SUNSHADE_PERCENT: { params: { percent: { type: 'number', min: 0, max: 100, default: '50' } }, label: 'Set sunshade position' },
+            
+            // Lighting
             SET_READING_LIGHT: { params: { state: { type: 'choice', options: [['1','On'],['0','Off']], default: '1' } }, label: 'Reading light' },
             SET_HEADLIGHT_LEVEL: { params: { level: { type: 'number', min: 1, max: 11, default: '6' } }, label: 'Headlamp height' },
+            SET_AMBIENT_COLOR: { params: { color: { type: 'number', min: 1, max: 30, default: '1' }, zone: { type: 'choice', options: [['Both','Both'],['Zone 1','Front'],['Zone 2','Rear']], default: 'Both' } }, label: 'Set ambient color' },
+            SET_AMBIENT_BRIGHTNESS: { params: { brightness: { type: 'number', min: 0, max: 5, default: '3' }, zone: { type: 'choice', options: [['Both','Both'],['Zone 1','Front'],['Zone 2','Rear']], default: 'Both' } }, label: 'Set ambient brightness' },
+            SET_AMBIENT_MULTICOLOR: { params: { state: { type: 'choice', options: [['true','On'],['false','Off']], default: 'true' } }, label: 'Ambient multicolor' },
+            SET_AMBIENT_MUSIC_MODE: { params: { state: { type: 'choice', options: [['true','On'],['false','Off']], default: 'true' } }, label: 'Ambient music mode' },
+            STOP_AMBIENT_ANIMATION: { params: {}, label: 'Stop ambient animation' },
+            SET_DAYTIME_RUNNING_LIGHTS: { params: { state: { type: 'choice', options: [['true','On'],['false','Off']], default: 'true' } }, label: 'Daytime running lights' },
+            SET_WELCOME_LIGHT: { params: { state: { type: 'choice', options: [['true','On'],['false','Off']], default: 'true' } }, label: 'Welcome light' },
+            
+            // Media
+            MEDIA_PLAY: { params: {}, label: 'Media play' },
+            MEDIA_PAUSE: { params: {}, label: 'Media pause' },
+            MEDIA_NEXT: { params: {}, label: 'Media next track' },
+            MEDIA_PREVIOUS: { params: {}, label: 'Media previous track' },
+            SET_MEDIA_VOLUME: { params: { level: { type: 'number', min: 0, max: 39, default: '20' } }, label: 'Set media volume' },
+            
+            // Driving
+            SET_REGEN_LEVEL: { params: { level: { type: 'choice', options: [['0','Standard'],['1','Large']], default: '0' } }, label: 'Set regen level' },
+            SET_DRIVE_MODE: { params: { mode: { type: 'choice', options: [['0','Eco'],['1','Sport'],['2','Snow']], default: '0' } }, label: 'Set drive mode' },
+            
+            // Notifications
+            SHOW_NOTIFICATION: { params: { message: { type: 'text', default: '', placeholder: 'Enter message' } }, label: 'Show notification' },
+            CLEAR_ALL_NOTIFICATIONS: { params: {}, label: 'Clear all notifications' },
+            CLEAR_NOTIFICATIONS_FROM_APP: { params: { packageName: { type: 'text', default: '', placeholder: 'com.example.app' } }, label: 'Clear notifications from app' },
+            
+            // Tailgate
             TAILGATE_OPEN: { params: {}, label: 'Open tailgate' },
             TAILGATE_CLOSE: { params: {}, label: 'Close tailgate' }
         };
@@ -1832,7 +1914,7 @@
         function showCreateAutomation() {
             document.getElementById('createAutomationName').value = '';
             document.getElementById('createAutomationTrigger').value = 'TIME_OF_DAY';
-            createAutomationActions = [{ type: 'AC_ON', params: Object.fromEntries(Object.entries(ACTION_CONFIG.AC_ON.params || {}).map(([k,v]) => [k, v.default || (v.options && v.options[0] ? v.options[0][0] : '')])) }];
+            createAutomationActions = [{ type: 'SET_AC_STATE', params: { state: '1' } }];
             updateCreateTriggerParams();
             renderCreateActions();
             document.getElementById('createAutomationModal').style.display = 'flex';
@@ -1851,11 +1933,14 @@
                 container.innerHTML = `<input type="time" id="createTriggerParam_${cfg.param}" value="${cfg.default || '08:00'}" style="width:100%;padding:12px;border-radius:8px;border:1px solid #2a3d4d;background:#111b23;color:#F1F3F6;">`;
             } else if (cfg.type === 'number') {
                 container.innerHTML = `<input type="number" id="createTriggerParam_${cfg.param}" value="${cfg.default || ''}" min="${cfg.min||0}" max="${cfg.max||999}" placeholder="${cfg.label}" style="width:100%;padding:12px;border-radius:8px;border:1px solid #2a3d4d;background:#111b23;color:#F1F3F6;">`;
+            } else if (cfg.type === 'choice') {
+                const opts = (cfg.options || []).map(([val,lab]) => `<option value="${val}">${lab}</option>`).join('');
+                container.innerHTML = `<select id="createTriggerParam_${cfg.param}" style="width:100%;padding:12px;border-radius:8px;border:1px solid #2a3d4d;background:#111b23;color:#F1F3F6;">${opts}</select>`;
             } else { container.innerHTML = ''; }
         }
         
         function addCreateAction() {
-            createAutomationActions.push({ type: 'AC_ON', params: {} });
+            createAutomationActions.push({ type: 'SET_AC_STATE', params: { state: '1' } });
             renderCreateActions();
         }
         
@@ -1893,6 +1978,10 @@
                         const def = a.params[k] !== undefined ? a.params[k] : (v.default || (v.options && v.options[0] ? v.options[0][0] : ''));
                         const opts = (v.options || []).map(([val,lab]) => `<option value="${val}" ${val===def?'selected':''}>${lab}</option>`).join('');
                         paramHtml += `<select data-i="${i}" data-k="${k}" onchange="updateCreateActionParam(${i},'${k}',this.value)" style="flex:0 0 80px;padding:8px;border-radius:6px;border:1px solid #2a3d4d;background:#111b23;color:#F1F3F6;">${opts}</select>`;
+                    } else if (v.type === 'text') {
+                        const val = a.params[k] !== undefined ? a.params[k] : (v.default || '');
+                        const placeholder = v.placeholder || k;
+                        paramHtml += `<input type="text" data-i="${i}" data-k="${k}" onchange="updateCreateActionParam(${i},'${k}',this.value)" value="${val}" placeholder="${placeholder}" style="flex:1;padding:8px;border-radius:6px;border:1px solid #2a3d4d;background:#111b23;color:#F1F3F6;">`;
                     }
                 }
                 return `<div class="action-item">
@@ -1913,9 +2002,15 @@
             const params = {};
             if (cfg.param) {
                 const el = document.getElementById('createTriggerParam_' + cfg.param);
-                if (el) params[cfg.param] = el.value || cfg.default || '';
-                // Commander expects timeLabel for display (e.g. TIME_OF_DAY)
-                if (cfg.param === 'time') params.timeLabel = params.time || params[cfg.param] || cfg.default || '';
+                if (el) {
+                    params[cfg.param] = el.value || cfg.default || '';
+                    // Commander expects timeLabel for display (e.g. TIME_OF_DAY)
+                    if (cfg.param === 'time') params.timeLabel = params.time || params[cfg.param] || cfg.default || '';
+                    // For choice-based triggers, add label parameter
+                    if (cfg.type === 'choice' && el.selectedOptions && el.selectedOptions[0]) {
+                        params[cfg.param + 'Label'] = el.selectedOptions[0].text;
+                    }
+                }
             }
             const trigger = { type: triggerType, parameters: params };
             // Use legacy triggers (not triggerGroups) when single trigger - avoids "AND" wrapper in Commander UI
@@ -1932,9 +2027,18 @@
                 if (cfg && cfg.params) {
                     for (const [k, v] of Object.entries(cfg.params)) {
                         const sel = document.querySelector(`[data-i="${i}"][data-k="${k}"]`);
-                        if (sel) p[k] = sel.value || (v.default !== undefined ? String(v.default) : '');
-                        else if (p[k] === undefined && v.default !== undefined) p[k] = String(v.default);
-                        else if (p[k] === undefined && v.options && v.options[0]) p[k] = v.options[0][0];
+                        if (sel) {
+                            p[k] = sel.value || (v.default !== undefined ? String(v.default) : '');
+                            // For choice-based parameters, also store the label
+                            if (v.type === 'choice' && sel.selectedOptions && sel.selectedOptions[0]) {
+                                p[k + 'Label'] = sel.selectedOptions[0].text;
+                            }
+                        } else if (p[k] === undefined && v.default !== undefined) {
+                            p[k] = String(v.default);
+                        } else if (p[k] === undefined && v.options && v.options[0]) {
+                            p[k] = v.options[0][0];
+                            p[k + 'Label'] = v.options[0][1];
+                        }
                     }
                 }
                 return {
@@ -3037,7 +3141,11 @@
         
         function onAcTempSyncChange() {
             if (isAcTempSyncOn()) {
+                // Sync is turned ON - set both zones to current driver temperature
                 sendCommand('setAcTemperature', { temperature: currentAcTemp, zone: 0 });
+            } else {
+                // Sync is turned OFF - set driver temperature only (passenger stays at current value)
+                sendCommand('setAcTemperature', { temperature: currentAcTemp, zone: 1 });
             }
         }
         
