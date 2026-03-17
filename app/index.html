@@ -1009,7 +1009,7 @@
             <div id="deviceInfo" class="device-info">
                 <div>
                     <div class="device-name-container">
-                        <span id="deviceName" class="device-name">Connected Car</span>
+                        <span id="deviceName" class="device-name">Car Connected</span>
                         <button class="edit-name-btn" onclick="editCarName()" title="Edit name">
                             <svg viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
@@ -1268,16 +1268,7 @@
         let updateInterval = null;
         let pingInterval = null;
         
-        // STUN/TURN servers for NAT traversal - Metered.ca configuration
-        const rtcConfig = {
-            iceServers: [
-                { urls: "stun:stun.relay.metered.ca:80" },
-                { urls: "turn:global.relay.metered.ca:80", username: "59300173e16020ec8eb46bc6", credential: "JkXmsWLaInmBZ3YB" },
-                { urls: "turn:global.relay.metered.ca:80?transport=tcp", username: "59300173e16020ec8eb46bc6", credential: "JkXmsWLaInmBZ3YB" },
-                { urls: "turn:global.relay.metered.ca:443", username: "59300173e16020ec8eb46bc6", credential: "JkXmsWLaInmBZ3YB" },
-                { urls: "turns:global.relay.metered.ca:443?transport=tcp", username: "59300173e16020ec8eb46bc6", credential: "JkXmsWLaInmBZ3YB" },
-            ],
-        };
+        // TURN credentials fetched from Cloudflare Worker (short-lived, per connection)
         
         // LocalStorage key for cached connection
         const STORAGE_KEY = 'companion_connection';
@@ -1350,7 +1341,7 @@
             
             // Update device info
             if (connectionInfo) {
-                document.getElementById('deviceName').textContent = connectionInfo.deviceName || 'Car Connected';
+                document.getElementById('deviceName').textContent = connectionInfo.deviceName || 'Connected Car';
                 document.getElementById('deviceStatus').textContent = useP2P ? 'Connected via P2P' : 'Connecting...';
             }
             
@@ -2074,7 +2065,19 @@
             try {
                 console.log('Initializing P2P connection with Cloudflare signaling...');
                 
-                createPeerConnection();
+                // Fetch short-lived TURN credentials from Cloudflare
+                const credRes = await fetch(`${SIGNALING_SERVER}/signaling/turn-credentials`);
+                if (!credRes.ok) {
+                    throw new Error('Failed to get TURN credentials');
+                }
+                const credData = await credRes.json();
+                const rtcConfig = {
+                    ...credData,
+                    iceTransportPolicy: 'relay'
+                };
+                console.log('TURN credentials received');
+                
+                createPeerConnection(rtcConfig);
                 
                 // Create data channel
                 dataChannel = peerConnection.createDataChannel('http-tunnel', {
@@ -2160,7 +2163,7 @@
             }
         }
         
-        function createPeerConnection() {
+        function createPeerConnection(rtcConfig) {
             peerConnection = new RTCPeerConnection(rtcConfig);
             iceCandidateBuffer = [];
             
