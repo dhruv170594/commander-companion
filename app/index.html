@@ -131,6 +131,16 @@
             opacity: 0.4;
             pointer-events: none;
         }
+        input[type="radio"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #00A8E8;
+        }
+        input[type="radio"] + span {
+            color: #F1F3F6;
+            font-size: 14px;
+        }
         .section-title {
             font-size: 18px;
             font-weight: bold;
@@ -1143,18 +1153,26 @@
         <div class="control-section">
             <div class="section-title">AC Control</div>
             <div class="segmented-control-label">Temperature</div>
+            <div style="display: flex; gap: 12px; margin-bottom: 12px; justify-content: center;">
+                <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                    <input type="radio" name="acTempZone" value="1" onchange="onAcTempZoneChange()">
+                    <span>Driver</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                    <input type="radio" name="acTempZone" value="2" onchange="onAcTempZoneChange()">
+                    <span>Passenger</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                    <input type="radio" name="acTempZone" value="0" checked onchange="onAcTempZoneChange()">
+                    <span>Both</span>
+                </label>
+            </div>
             <div class="segmented-control">
                 <button class="decrement-btn" onclick="adjustAcTemp(-1)">−</button>
                 <span class="value-display" id="acTempDisplay">22°C</span>
                 <button class="increment-btn" onclick="adjustAcTemp(1)">+</button>
             </div>
             <div class="status-label" id="acTempActualText" style="margin-top: 6px;">Actual: --°C</div>
-            <div class="window-control" style="margin-top: 12px; display: flex; align-items: center; gap: 8px;">
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                    <input type="checkbox" id="acTempSync" checked onchange="onAcTempSyncChange()">
-                    <span>Sync passenger to driver temperature</span>
-                </label>
-            </div>
             
             <div class="segmented-control-label" style="margin-top: 16px;">Fan Speed (Set)</div>
             <div class="segmented-control">
@@ -3228,26 +3246,22 @@
         let currentAcFan = 3;
         let acFanInitialized = false;
         
-        function isAcTempSyncOn() {
-            const cb = document.getElementById('acTempSync');
-            return cb ? cb.checked : true;
+        function getSelectedAcTempZone() {
+            const selected = document.querySelector('input[name="acTempZone"]:checked');
+            return selected ? parseInt(selected.value) : 0; // 0=both, 1=driver, 2=passenger
         }
         
         function adjustAcTemp(delta) {
             currentAcTemp = Math.min(30, Math.max(16, currentAcTemp + delta));
             document.getElementById('acTempDisplay').textContent = currentAcTemp + '°C';
-            const zone = isAcTempSyncOn() ? 0 : 1; // 0=both, 1=driver only
+            const zone = getSelectedAcTempZone();
             sendCommand('setAcTemperature', { temperature: currentAcTemp, zone });
         }
         
-        function onAcTempSyncChange() {
-            if (isAcTempSyncOn()) {
-                // Sync is turned ON - set both zones to current driver temperature
-                sendCommand('setAcTemperature', { temperature: currentAcTemp, zone: 0 });
-            } else {
-                // Sync is turned OFF - set driver temperature only (passenger stays at current value)
-                sendCommand('setAcTemperature', { temperature: currentAcTemp, zone: 1 });
-            }
+        function onAcTempZoneChange() {
+            // When zone selection changes, apply current temperature to the newly selected zone
+            const zone = getSelectedAcTempZone();
+            sendCommand('setAcTemperature', { temperature: currentAcTemp, zone });
         }
         
         function adjustAcFan(delta) {
