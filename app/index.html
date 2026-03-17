@@ -2162,6 +2162,7 @@
                 
             } catch (error) {
                 console.error('P2P initialization error:', error);
+                localStorage.removeItem(TURN_CACHE_KEY); // Fresh creds for retry
                 updateConnectionStatus(false);
                 showError('Failed to initialize P2P connection: ' + error.message);
                 showAppScreen();
@@ -2335,6 +2336,7 @@
                 if (pollCount > maxPolls) {
                     console.error('Signaling timeout - car did not respond');
                     stopSignalingPoll();
+                    localStorage.removeItem(TURN_CACHE_KEY); // Fresh creds for retry
                     showError('Connection timeout. Make sure the car is on and Commander app is running.');
                     document.getElementById('deviceStatus').textContent = 'Car offline';
                     showRetryButton();
@@ -2420,8 +2422,9 @@
                 stopDataUpdates();
                 stopPing();
                 
-                // Clear cached connection
+                // Clear cached connection and TURN credentials (fresh creds needed for reconnect)
                 localStorage.removeItem(STORAGE_KEY);
+                localStorage.removeItem(TURN_CACHE_KEY);
                 connectionInfo = null;
                 
                 // Show scan screen
@@ -2466,6 +2469,7 @@
                         stopPing();
                         
                         localStorage.removeItem(STORAGE_KEY);
+                        localStorage.removeItem(TURN_CACHE_KEY);
                         connectionInfo = null;
                         showScanScreen();
                     }
