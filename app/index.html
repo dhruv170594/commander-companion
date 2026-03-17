@@ -12,6 +12,11 @@
     <link rel="manifest" href="/app/manifest.json">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- MapLibre GL for OpenFreeMap -->
+    <link href="https://unpkg.com/maplibre-gl/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl/dist/maplibre-gl.js"></script>
+    <!-- MapLibre GL Leaflet Plugin -->
+    <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet/leaflet-maplibre-gl.js"></script>
     <!-- QR Code Scanner Library -->
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
@@ -3120,15 +3125,13 @@
             if (!el) return;
             
             map = L.map('map').setView([0, 0], 15);
-            const layer = L.tileLayer('https://tiles.openfreemap.com/osm/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '© OpenFreeMap © OpenStreetMap',
-                detectRetina: true,
-                tileSize: 512,
-                zoomOffset: -1
-            });
-            layer.on('tileerror', function () { console.warn('Map tile failed to load'); });
-            layer.addTo(map);
+            
+            // Use OpenFreeMap with MapLibre GL
+            L.maplibreGL({
+                style: 'https://tiles.openfreemap.org/styles/liberty',
+                attribution: '© OpenFreeMap © OpenStreetMap'
+            }).addTo(map);
+            
             setTimeout(function () { try { map.invalidateSize(); } catch (e) {} }, 150);
         }
         
