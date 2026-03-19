@@ -76,34 +76,7 @@
             font-size: 18px;
             line-height: 1.5;
             color: #F1F3F6;
-        }
-        .share-icon {
-            display: inline-block;
-            width: 24px;
-            height: 24px;
-            vertical-align: middle;
-            margin: 0 4px;
-        }
-        .highlight {
-            color: #1F8AFF;
-            font-weight: 600;
-        }
-        .arrow-container {
-            margin-top: 16px;
-            animation: bounce 1.5s ease-in-out infinite;
-        }
-        .arrow {
-            width: 40px;
-            height: 40px;
-            color: #1F8AFF;
-        }
-        @keyframes bounce {
-            0%, 100% {
-                transform: translateY(0);
-            }
-            50% {
-                transform: translateY(10px);
-            }
+            text-align: center;
         }
         
         /* Desktop redirect */
@@ -157,18 +130,22 @@
         <div>
             <div class="instruction-box">
                 <p class="instruction-text">
-                    Tap the <span class="highlight">Share</span> button
-                    <svg class="share-icon" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.11 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z"/>
-                    </svg>
-                    below, then tap<br><span class="highlight">"Add to Home Screen"</span>
+                    Add this app to your home screen for the best experience
                 </p>
-            </div>
-            
-            <div class="arrow-container">
-                <svg class="arrow" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
-                </svg>
+                <button onclick="window.location.href='/app/'" style="
+                    width: 100%;
+                    margin-top: 16px;
+                    padding: 14px;
+                    background: #1F8AFF;
+                    border: none;
+                    border-radius: 12px;
+                    color: white;
+                    font-size: 16px;
+                    font-weight: 600;
+                    cursor: pointer;
+                ">
+                    Open App
+                </button>
             </div>
         </div>
     </div>
