@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Commander Companion">
-        <meta name="app-version" content="12">
+        <meta name="app-version" content="13">
     <title>Commander Companion</title>
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -1286,18 +1286,14 @@
         <div class="control-section">
             <div class="section-title">AC Control</div>
             <div class="segmented-control-label">Temperature</div>
-            <div style="display: flex; gap: 12px; margin-bottom: 12px; justify-content: center;">
+            <div style="display: flex; gap: 12px; margin-bottom: 12px; justify-content: flex-start;">
                 <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
-                    <input type="radio" name="acTempZone" value="1" onchange="onAcTempZoneChange()">
+                    <input type="radio" name="acTempZone" value="1" checked onchange="onAcTempZoneChange()">
                     <span>Driver</span>
                 </label>
                 <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
                     <input type="radio" name="acTempZone" value="2" onchange="onAcTempZoneChange()">
                     <span>Passenger</span>
-                </label>
-                <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
-                    <input type="radio" name="acTempZone" value="0" checked onchange="onAcTempZoneChange()">
-                    <span>Both</span>
                 </label>
             </div>
             <div class="segmented-control">
@@ -1325,9 +1321,9 @@
         <div class="control-section">
             <div class="section-title">Seat Memory</div>
             <div class="button-group">
-                <button onclick="sendCommand('setSeatMemory', {position: 1})">Position 1</button>
-                <button onclick="sendCommand('setSeatMemory', {position: 2})">Position 2</button>
-                <button onclick="sendCommand('setSeatMemory', {position: 3})">Position 3</button>
+                <button onclick="recallSeatMemory(1)">Position 1</button>
+                <button onclick="recallSeatMemory(2)">Position 2</button>
+                <button onclick="recallSeatMemory(3)">Position 3</button>
             </div>
         </div>
         
@@ -1504,6 +1500,9 @@
             console.log('Companion app loaded');
             console.log('Signaling server:', SIGNALING_SERVER);
             
+            // Initially disable all controls until connection is established
+            updateControlsState(false);
+            
             // Check for cached connection
             const cached = localStorage.getItem(STORAGE_KEY);
             if (cached) {
@@ -1585,6 +1584,10 @@
                 document.getElementById('deviceName').textContent = connectionInfo.deviceName || 'Connected Car';
                 document.getElementById('deviceStatus').textContent = useP2P ? 'Connected via P2P' : 'Connecting...';
             }
+            
+            // Ensure controls are in correct state based on connection
+            const isConnected = useP2P && dataChannel && dataChannel.readyState === 'open';
+            updateControlsState(isConnected);
             
             // Show last known status when disconnected/reconnecting
             if (!useP2P) {
@@ -2087,7 +2090,7 @@
         const ACTION_CONFIG = {
             // Climate Control
             SET_AC_STATE: { params: { state: { type: 'choice', options: [['1','On'],['0','Off']], default: '1' } }, label: 'Set AC state' },
-            SET_AC_TEMPERATURE: { params: { temp: { type: 'number', min: 16, max: 30, default: '22' }, zone: { type: 'choice', options: [['Both','Both'],['Driver','Driver'],['Passenger','Passenger']], default: 'Both' } }, label: 'Set AC temperature' },
+            SET_AC_TEMPERATURE: { params: { temp: { type: 'number', min: 16, max: 30, default: '22' }, zone: { type: 'choice', options: [['Driver','Driver'],['Passenger','Passenger']], default: 'Driver' } }, label: 'Set AC temperature' },
             SET_AC_FAN_LEVEL: { params: { level: { type: 'number', min: 1, max: 7, default: '3' } }, label: 'Set AC fan level' },
             SET_AC_AUTO_MODE: { params: { enabled: { type: 'choice', options: [['true','On'],['false','Off']], default: 'true' } }, label: 'Set AC auto mode' },
             SET_SEAT_HEATING: { params: { position: { type: 'choice', options: [['1','Driver'],['2','Passenger']], default: '1' }, level: { type: 'number', min: 0, max: 2, default: '2' } }, label: 'Set seat heating' },
@@ -2698,6 +2701,9 @@
                 // Show app screen while waiting for connection
                 showAppScreen();
                 
+                // Grey out controls until connection is established
+                updateConnectionStatus(false);
+                
                 // Poll for answer
                 startSignalingPoll();
                 
@@ -3149,10 +3155,6 @@
                         command = 'ac';
                         commandParams = { on: true, fan: params.fan };
                         break;
-                    case 'setSeatMemory':
-                        command = 'seatMemory';
-                        commandParams = { position: params.position };
-                        break;
                     case 'setWindowToPercentage':
                         command = 'window';
                         const posMap = { 1: 'lf', 2: 'rf', 3: 'lr', 4: 'rr' };
@@ -3176,6 +3178,36 @@
                 }
             } else {
                 showError('Not connected to car. Please wait for P2P connection.');
+            }
+        }
+        
+        async function recallSeatMemory(slot) {
+            if (!useP2P || !dataChannel || dataChannel.readyState !== 'open') {
+                showError('Not connected to car. Please wait for P2P connection.');
+                return;
+            }
+            try {
+                const result = await sendP2PRequest('POST', '/api/actions/execute', {
+                    type: 'RECALL_SEAT_POSITION',
+                    parameters: { 
+                        slot: slot.toString()
+                    }
+                });
+                const body = result?.body;
+                if (body && body.success) {
+                    const errEl = document.getElementById('errorMessage');
+                    if (errEl) {
+                        errEl.textContent = `Recalled seat memory position ${slot}`;
+                        errEl.style.background = '#2e7d32';
+                        errEl.style.display = 'block';
+                        setTimeout(() => { errEl.style.display = 'none'; errEl.style.background = ''; }, 2000);
+                    }
+                } else {
+                    showError('Failed to recall seat memory: ' + (body?.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Seat memory recall error:', error);
+                showError('Failed to recall seat memory: ' + error.message);
             }
         }
         
