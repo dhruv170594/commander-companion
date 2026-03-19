@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Commander Companion">
-    <meta name="app-version" content="10">
+    <meta name="app-version" content="11">
     <title>Commander Companion</title>
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -155,6 +155,18 @@
         }
         .leaflet-control-attribution a {
             font-size: 9px !important;
+        }
+        .leaflet-popup-content-wrapper {
+            background: transparent !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+        }
+        .leaflet-popup-content {
+            margin: 0 !important;
+        }
+        .leaflet-popup-tip {
+            background: #18273c !important;
+            box-shadow: none !important;
         }
         .map-center-button {
             position: absolute;
@@ -3377,20 +3389,21 @@
                 </div>
             `;
             
-            // Create marker
+            // Create marker (invisible, just for popup anchor)
             const marker = L.marker([lat, lon], {
                 icon: L.divIcon({
-                    className: 'search-marker',
-                    html: '<div style="background: #1F8AFF; width: 30px; height: 30px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"></div>',
-                    iconSize: [30, 30],
-                    iconAnchor: [15, 15]
+                    className: 'invisible-marker',
+                    html: '',
+                    iconSize: [0, 0],
+                    iconAnchor: [0, 0]
                 })
             }).addTo(map);
             
             // Bind popup
             marker.bindPopup(popupContent, {
                 maxWidth: 250,
-                className: 'location-popup-container'
+                className: 'location-popup-container',
+                offset: [0, 0]
             }).openPopup();
             
             // Store marker reference
