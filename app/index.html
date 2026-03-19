@@ -7,9 +7,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Commander Companion">
-    <meta name="app-version" content="5">
+    <meta name="app-version" content="6">
     <title>Commander Companion</title>
-    <link rel="manifest" href="/app/manifest.json">
+    <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <!-- MapLibre GL for OpenFreeMap -->
@@ -1384,6 +1384,17 @@
         document.addEventListener('DOMContentLoaded', () => {
             console.log('Companion app loaded');
             console.log('Signaling server:', SIGNALING_SERVER);
+            
+            // Register service worker (required for share target)
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('Service Worker registered:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.error('Service Worker registration failed:', error);
+                    });
+            }
             
             // Check for cached connection
             const cached = localStorage.getItem(STORAGE_KEY);
