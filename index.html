@@ -38,8 +38,15 @@
             flex-direction: column;
             align-items: center;
             flex: 1;
-            justify-content: center;
-            padding-bottom: 120px;
+            justify-content: space-between;
+            padding-top: 60px;
+            padding-bottom: 40px;
+        }
+        .container > div {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
         }
         .logo {
             width: 80px;
@@ -98,49 +105,6 @@
                 transform: translateY(10px);
             }
         }
-        .browser-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(30, 30, 30, 0.95);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            padding: 12px 16px;
-            padding-bottom: max(12px, env(safe-area-inset-bottom));
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-top: 1px solid #333;
-        }
-        .browser-url {
-            flex: 1;
-            text-align: center;
-            font-size: 14px;
-            color: #9AA3AF;
-        }
-        .browser-icons {
-            display: flex;
-            gap: 20px;
-            color: #1F8AFF;
-        }
-        .browser-icon {
-            width: 24px;
-            height: 24px;
-            opacity: 0.7;
-        }
-        .browser-icon.share {
-            opacity: 1;
-            animation: pulse 2s ease-in-out infinite;
-        }
-        @keyframes pulse {
-            0%, 100% {
-                transform: scale(1);
-            }
-            50% {
-                transform: scale(1.2);
-            }
-        }
         
         /* Desktop redirect */
         .desktop-message {
@@ -153,9 +117,6 @@
             }
             .desktop-message {
                 display: block;
-            }
-            .browser-bar {
-                display: none;
             }
         }
         
@@ -187,24 +148,28 @@
 </head>
 <body>
     <div class="container mobile-only">
-        <img src="/icon-192.png" alt="Commander Companion" class="logo">
-        <h1 class="title">Commander Companion</h1>
-        <p class="subtitle">Remote control for your BYD</p>
-        
-        <div class="instruction-box">
-            <p class="instruction-text">
-                Tap the <span class="highlight">Share</span> button
-                <svg class="share-icon" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.11 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z"/>
-                </svg>
-                below, then tap<br><span class="highlight">"Add to Home Screen"</span>
-            </p>
+        <div>
+            <img src="/icon-192.png" alt="Commander Companion" class="logo">
+            <h1 class="title">Commander Companion</h1>
+            <p class="subtitle">Remote control for your BYD</p>
         </div>
         
-        <div class="arrow-container">
-            <svg class="arrow" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
-            </svg>
+        <div>
+            <div class="instruction-box">
+                <p class="instruction-text">
+                    Tap the <span class="highlight">Share</span> button
+                    <svg class="share-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.11 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z"/>
+                    </svg>
+                    below, then tap<br><span class="highlight">"Add to Home Screen"</span>
+                </p>
+            </div>
+            
+            <div class="arrow-container">
+                <svg class="arrow" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+                </svg>
+            </div>
         </div>
     </div>
     
@@ -218,30 +183,6 @@
                 This app is designed for mobile devices.<br><br>
                 <a href="/app/" style="color: #1F8AFF; text-decoration: none;">Open the app anyway →</a>
             </p>
-        </div>
-    </div>
-    
-    <!-- Fake browser bar to show where share button is -->
-    <div class="browser-bar">
-        <div class="browser-icons">
-            <svg class="browser-icon" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
-            </svg>
-            <svg class="browser-icon" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
-            </svg>
-        </div>
-        <div class="browser-url">bydcommander.win</div>
-        <div class="browser-icons">
-            <svg class="browser-icon share" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.11 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z"/>
-            </svg>
-            <svg class="browser-icon" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
-            </svg>
-            <svg class="browser-icon" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-            </svg>
         </div>
     </div>
 </body>
