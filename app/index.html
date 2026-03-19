@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Commander Companion">
-        <meta name="app-version" content="13">
+        <meta name="app-version" content="14">
     <title>Commander Companion</title>
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -2327,6 +2327,29 @@
             }
         }
         
+        // Fetch and cache automations in background (regardless of current page)
+        async function fetchAndCacheAutomations() {
+            if (!useP2P || !dataChannel || dataChannel.readyState !== 'open') return;
+            
+            try {
+                console.log('Fetching automations from car for background sync...');
+                const result = await sendP2PRequest('GET', '/api/automations');
+                
+                if (result && result.body && Array.isArray(result.body)) {
+                    automations = result.body;
+                    saveAutomationsToCache(automations);
+                    console.log(`✅ Cached ${automations.length} automations from car`);
+                    
+                    // If user is currently on automations page, refresh the display
+                    if (currentPage === 'automations') {
+                        renderAutomationsList(automations, false, true);
+                    }
+                }
+            } catch (error) {
+                console.warn('Background automation sync failed:', error);
+            }
+        }
+        
         // Sync pending automations when connected
         async function syncPendingAutomations() {
             if (pendingAutomations.length === 0 && pendingDeletions.length === 0) return;
@@ -2809,8 +2832,11 @@
                 // Start revocation check
                 startRevocationCheck();
                 
-                // Sync any pending automations
-                setTimeout(() => syncPendingAutomations(), 1000);
+                // Sync any pending automations and fetch full automation list
+                setTimeout(() => {
+                    syncPendingAutomations();
+                    fetchAndCacheAutomations();
+                }, 1000);
             };
             
             channel.onclose = () => {
