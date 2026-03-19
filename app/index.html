@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Commander Companion">
-    <meta name="app-version" content="11">
+        <meta name="app-version" content="12">
     <title>Commander Companion</title>
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -3426,13 +3426,15 @@
             
             try {
                 const requestBody = {
-                    action: 'OPEN_LOCATION',
-                    latitude: lat,
-                    longitude: lon,
-                    name: name || 'Selected Location'
+                    type: 'OPEN_LOCATION',
+                    parameters: {
+                        latitude: lat.toString(),
+                        longitude: lon.toString(),
+                        name: name || 'Selected Location'
+                    }
                 };
                 
-                await sendP2PRequest('POST', '/api/location/open', requestBody);
+                await sendP2PRequest('POST', '/api/actions/execute', requestBody);
                 
                 // Show success message
                 const msg = document.getElementById('errorMessage');
