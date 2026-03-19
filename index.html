@@ -78,6 +78,27 @@
             color: #F1F3F6;
             text-align: center;
         }
+        .highlight {
+            color: #1F8AFF;
+            font-weight: 600;
+        }
+        .arrow-container {
+            margin-top: 16px;
+            animation: bounce 1.5s ease-in-out infinite;
+        }
+        .arrow {
+            width: 40px;
+            height: 40px;
+            color: #1F8AFF;
+        }
+        @keyframes bounce {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(10px);
+            }
+        }
         
         /* Desktop redirect */
         .desktop-message {
@@ -130,22 +151,14 @@
         <div>
             <div class="instruction-box">
                 <p class="instruction-text">
-                    Add this app to your home screen for the best experience
+                    Tap the <span class="highlight">Share</span> button below, then tap<br><span class="highlight">"Add to Home Screen"</span>
                 </p>
-                <button onclick="window.location.href='/app/'" style="
-                    width: 100%;
-                    margin-top: 16px;
-                    padding: 14px;
-                    background: #1F8AFF;
-                    border: none;
-                    border-radius: 12px;
-                    color: white;
-                    font-size: 16px;
-                    font-weight: 600;
-                    cursor: pointer;
-                ">
-                    Open App
-                </button>
+            </div>
+            
+            <div class="arrow-container">
+                <svg class="arrow" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+                </svg>
             </div>
         </div>
     </div>
