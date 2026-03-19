@@ -1,10 +1,11 @@
 {
   "name": "Commander Companion",
-  "short_name": "Commander Companion",
+  "short_name": "Companion",
   "description": "Remote control companion app for BYD Auto Commander",
-  "start_url": "/",
+  "start_url": "/app/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#1a1a1a",
+  "background_color": "#111b23",
   "theme_color": "#1F8AFF",
   "orientation": "portrait",
   "icons": [
@@ -12,13 +13,23 @@
       "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     }
-  ]
+  ],
+  "share_target": {
+    "action": "/app/share.html",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
 }
