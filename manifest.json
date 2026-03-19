@@ -3,7 +3,7 @@
   "short_name": "Companion",
   "description": "Remote control companion app for BYD Auto Commander",
   "start_url": "/app/",
-  "scope": "/",
+  "scope": "/app/",
   "display": "standalone",
   "background_color": "#111b23",
   "theme_color": "#1F8AFF",
@@ -21,15 +21,5 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ],
-  "share_target": {
-    "action": "/app/share.html",
-    "method": "GET",
-    "enctype": "application/x-www-form-urlencoded",
-    "params": {
-      "title": "title",
-      "text": "text",
-      "url": "url"
-    }
-  }
+  ]
 }
