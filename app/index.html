@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Commander Companion">
-    <meta name="app-version" content="7">
+    <meta name="app-version" content="8">
     <title>Commander Companion</title>
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -2751,9 +2751,6 @@
                 
                 // Sync any pending automations
                 setTimeout(() => syncPendingAutomations(), 1000);
-                
-                // Check for pending location share
-                setTimeout(() => checkPendingLocationShare(), 1500);
             };
             
             channel.onclose = () => {
