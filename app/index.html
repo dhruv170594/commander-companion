@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Commander Companion">
-    <meta name="app-version" content="9">
+    <meta name="app-version" content="10">
     <title>Commander Companion</title>
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -69,7 +69,7 @@
         .map-search-input:focus {
             border-color: #1F8AFF;
         }
-        .map-send-button {
+        .map-search-button {
             background: #1F8AFF;
             border: none;
             border-radius: 12px;
@@ -81,16 +81,58 @@
             cursor: pointer;
             flex-shrink: 0;
         }
-        .map-send-button:active {
+        .map-search-button:active {
             background: #1976D2;
         }
-        .map-send-button:disabled {
+        .map-search-button:disabled {
             background: #2a3f5f;
             cursor: not-allowed;
         }
-        .map-send-button svg {
+        .map-search-button svg {
             width: 24px;
             height: 24px;
+            fill: white;
+        }
+        .location-popup {
+            background: #18273c;
+            border-radius: 12px;
+            padding: 16px;
+            min-width: 200px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .location-popup-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #F1F3F6;
+            margin-bottom: 8px;
+        }
+        .location-popup-address {
+            font-size: 12px;
+            color: #9AA3AF;
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+        .location-popup-button {
+            width: 100%;
+            background: #1F8AFF;
+            border: none;
+            border-radius: 8px;
+            padding: 10px;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .location-popup-button:active {
+            background: #1976D2;
+        }
+        .location-popup-button svg {
+            width: 16px;
+            height: 16px;
             fill: white;
         }
         .map-container {
@@ -1161,11 +1203,11 @@
                     id="mapSearchInput" 
                     class="map-search-input" 
                     placeholder="Search for a destination..."
-                    onkeypress="if(event.key === 'Enter') searchAndSendLocation()"
+                    onkeypress="if(event.key === 'Enter') searchLocation()"
                 />
-                <button class="map-send-button" id="mapSendButton" onclick="searchAndSendLocation()" disabled>
+                <button class="map-search-button" id="mapSearchButton" onclick="searchLocation()" disabled>
                     <svg viewBox="0 0 24 24">
-                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
                     </svg>
                 </button>
             </div>
@@ -3221,6 +3263,24 @@
                 attribution: '<a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>'
             }).addTo(map);
             
+            // Add click handler for map
+            map.on('click', async function(e) {
+                const lat = e.latlng.lat;
+                const lon = e.latlng.lng;
+                
+                // Reverse geocode to get location name
+                try {
+                    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+                    const data = await response.json();
+                    const name = data.display_name || `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+                    
+                    showLocationMarker(lat, lon, name, false);
+                } catch (error) {
+                    console.error('Reverse geocoding error:', error);
+                    showLocationMarker(lat, lon, `${lat.toFixed(6)}, ${lon.toFixed(6)}`, false);
+                }
+            });
+            
             setTimeout(function () { try { map.invalidateSize(); } catch (e) {} }, 150);
         }
         
@@ -3245,13 +3305,13 @@
             }
         }
         
-        // Search and send location to car
+        // Search location and show popup
         let searchMarker = null;
-        let searchedLocation = null;
+        let clickMarker = null;
         
-        async function searchAndSendLocation() {
+        async function searchLocation() {
             const searchInput = document.getElementById('mapSearchInput');
-            const sendButton = document.getElementById('mapSendButton');
+            const searchButton = document.getElementById('mapSearchButton');
             const query = searchInput.value.trim();
             
             if (!query) {
@@ -3260,7 +3320,7 @@
             }
             
             // Disable button while searching
-            sendButton.disabled = true;
+            searchButton.disabled = true;
             searchInput.disabled = true;
             
             try {
@@ -3270,7 +3330,7 @@
                 
                 if (results.length === 0) {
                     showError('Location not found. Try a different search.');
-                    sendButton.disabled = false;
+                    searchButton.disabled = false;
                     searchInput.disabled = false;
                     return;
                 }
@@ -3280,36 +3340,68 @@
                 const lon = parseFloat(location.lon);
                 const name = location.display_name;
                 
-                // Store the searched location
-                searchedLocation = { lat, lon, name };
-                
-                // Show location on map
-                if (searchMarker) {
-                    map.removeLayer(searchMarker);
-                }
-                searchMarker = L.marker([lat, lon], {
-                    icon: L.divIcon({
-                        className: 'search-marker',
-                        html: '<div style="background: #1F8AFF; width: 30px; height: 30px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"></div>',
-                        iconSize: [30, 30],
-                        iconAnchor: [15, 15]
-                    })
-                }).addTo(map);
-                map.setView([lat, lon], 15);
-                
-                // Send to car
-                await sendLocationToCar(lat, lon, name);
+                // Show location on map with popup
+                showLocationMarker(lat, lon, name, true);
                 
                 // Clear search input
                 searchInput.value = '';
+                searchButton.disabled = true;
                 
             } catch (error) {
                 console.error('Search error:', error);
                 showError('Failed to search location. Please try again.');
             } finally {
-                sendButton.disabled = false;
                 searchInput.disabled = false;
             }
+        }
+        
+        function showLocationMarker(lat, lon, name, isSearch = false) {
+            // Remove existing marker if it's the same type
+            if (isSearch && searchMarker) {
+                map.removeLayer(searchMarker);
+            } else if (!isSearch && clickMarker) {
+                map.removeLayer(clickMarker);
+            }
+            
+            // Create popup content
+            const popupContent = `
+                <div class="location-popup">
+                    <div class="location-popup-title">${name.split(',')[0]}</div>
+                    <div class="location-popup-address">${name}</div>
+                    <button class="location-popup-button" onclick="sendLocationToCar(${lat}, ${lon}, '${name.replace(/'/g, "\\'")}')">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                        </svg>
+                        Send to Car
+                    </button>
+                </div>
+            `;
+            
+            // Create marker
+            const marker = L.marker([lat, lon], {
+                icon: L.divIcon({
+                    className: 'search-marker',
+                    html: '<div style="background: #1F8AFF; width: 30px; height: 30px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"></div>',
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                })
+            }).addTo(map);
+            
+            // Bind popup
+            marker.bindPopup(popupContent, {
+                maxWidth: 250,
+                className: 'location-popup-container'
+            }).openPopup();
+            
+            // Store marker reference
+            if (isSearch) {
+                searchMarker = marker;
+            } else {
+                clickMarker = marker;
+            }
+            
+            // Center map on location
+            map.setView([lat, lon], 15);
         }
         
         async function sendLocationToCar(lat, lon, name) {
@@ -3324,7 +3416,7 @@
                     action: 'OPEN_LOCATION',
                     latitude: lat,
                     longitude: lon,
-                    name: name || 'Searched Location'
+                    name: name || 'Selected Location'
                 };
                 
                 await sendP2PRequest('POST', '/api/location/open', requestBody);
@@ -3338,20 +3430,24 @@
                     setTimeout(() => { msg.style.display = 'none'; msg.style.background = ''; }, 3000);
                 }
                 
+                // Close popup
+                if (searchMarker) searchMarker.closePopup();
+                if (clickMarker) clickMarker.closePopup();
+                
             } catch (error) {
                 console.error('Failed to send location:', error);
                 showError('Failed to send location to car');
             }
         }
         
-        // Enable send button when user types
+        // Enable search button when user types
         document.addEventListener('DOMContentLoaded', () => {
             const searchInput = document.getElementById('mapSearchInput');
-            const sendButton = document.getElementById('mapSendButton');
+            const searchButton = document.getElementById('mapSearchButton');
             
-            if (searchInput && sendButton) {
+            if (searchInput && searchButton) {
                 searchInput.addEventListener('input', () => {
-                    sendButton.disabled = searchInput.value.trim().length === 0;
+                    searchButton.disabled = searchInput.value.trim().length === 0;
                 });
             }
         });
